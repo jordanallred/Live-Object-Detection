@@ -1,0 +1,73 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<div id="live" class="content">
+    {% if use_test_video %}
+    <div class="source-info">
+        <strong>Currently using test video:</strong> {{ test_video_path }}
+    </div>
+    {% endif %}
+    
+    <div class="video-container">
+        <img src="{{ url_for('video_feed') }}" class="video-feed" alt="Live Video Feed">
+    </div>
+</div>
+
+<div id="history" class="content" style="display: none;">
+    <div class="history-container" id="detection-history">
+        <p>Loading detection history...</p>
+    </div>
+</div>
+
+<div id="settings" class="content" style="display: none;">
+    <h2>System Settings</h2>
+    
+    <div class="config-section">
+        <h3>Video Source</h3>
+        <form id="video-source-form" action="{{ url_for('update_config') }}" method="post">
+            <div>
+                <input type="radio" id="use-camera" name="video_source" value="camera" {% if not use_test_video %}checked{% endif %}>
+                <label for="use-camera">Use Camera</label>
+                <select name="camera_id" id="camera-select">
+                    <option value="0">Webcam (0)</option>
+                    <option value="1">External Camera (1)</option>
+                    <option value="2">Other Camera (2)</option>
+                </select>
+            </div>
+            <div>
+                <input type="radio" id="use-test-video" name="video_source" value="test_video" {% if use_test_video %}checked{% endif %}>
+                <label for="use-test-video">Use Test Video</label>
+                <select name="test_video" id="test-video-select">
+                    <option value="{{ test_video_path }}" selected>{{ test_video_path }}</option>
+                </select>
+            </div>
+            <div class="upload-form">
+                <h4>Upload Test Video</h4>
+                <input type="file" id="video-upload" name="video_file" accept="video/*">
+                <button type="button" onclick="uploadTestVideo()">Upload</button>
+            </div>
+            <button type="submit" class="btn btn-details">Save Changes</button>
+        </form>
+    </div>
+    
+    <div class="config-section">
+        <h3>Detection Settings</h3>
+        <form id="detection-settings-form" action="{{ url_for('update_config') }}" method="post">
+            <div>
+                <label for="confidence-threshold">Confidence Threshold:</label>
+                <input type="range" id="confidence-threshold" name="confidence_threshold" min="0.1" max="0.9" step="0.1" value="0.5">
+                <span id="confidence-value">0.5</span>
+            </div>
+            <div>
+                <label for="detection-interval">Detection Interval (seconds):</label>
+                <input type="number" id="detection-interval" name="detection_interval" min="0.5" max="10" step="0.5" value="1">
+            </div>
+            <div>
+                <label for="clip-duration">Clip Duration (seconds):</label>
+                <input type="number" id="clip-duration" name="clip_duration" min="3" max="30" value="5">
+            </div>
+            <button type="submit" class="btn btn-details">Save Changes</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

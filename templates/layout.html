@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Home Surveillance System</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Home Surveillance System</h1>
+        </div>
+
+        <div class="tabs">
+            <div class="tab" onclick="openTab('live')">Live Feed</div>
+            <div class="tab" onclick="openTab('history')">Detection History</div>
+            <div class="tab" onclick="openTab('settings')">Settings</div>
+        </div>
+
+        {% block content %}{% endblock %}
+    </div>
+
+    <!-- Video Modal -->
+    <div id="videoModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('videoModal')">&times;</span>
+            <h2 id="video-title">Detection Video</h2>
+            <video id="video-player" controls></video>
+        </div>
+    </div>
+
+    <!-- Details Modal -->
+    <div id="detailsModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('detailsModal')">&times;</span>
+            <h2 id="details-title">Detection Details</h2>
+            <pre id="details-content"></pre>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
