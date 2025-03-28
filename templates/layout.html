@@ -1,39 +1,52 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Home Surveillance System</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Advanced object detection and surveillance system">
+    <meta name="theme-color" content="#3a86ff">
+    <title>Smart Object Detection System</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+    <!-- Material Icons -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>Home Surveillance System</h1>
+            <h1><span class="material-icons" style="vertical-align: middle; margin-right: 10px;">visibility</span> Smart Object Detection</h1>
         </div>
 
         <div class="tabs">
-            <div class="tab" onclick="openTab('live')">Live Feed</div>
-            <div class="tab" onclick="openTab('history')">Detection History</div>
-            <div class="tab" onclick="openTab('settings')">Settings</div>
+            <div class="tab" onclick="openTab('live')">
+                <span class="material-icons" style="vertical-align: middle; margin-right: 5px; font-size: 18px;">videocam</span>
+                Live Feed
+            </div>
+            <div class="tab" onclick="openTab('history')">
+                <span class="material-icons" style="vertical-align: middle; margin-right: 5px; font-size: 18px;">history</span>
+                Detection History
+            </div>
+            <div class="tab" onclick="openTab('settings')">
+                <span class="material-icons" style="vertical-align: middle; margin-right: 5px; font-size: 18px;">settings</span>
+                Settings
+            </div>
         </div>
 
         {% block content %}{% endblock %}
-    </div>
-
-    <!-- Video Modal -->
-    <div id="videoModal" class="modal">
-        <div class="modal-content">
-            <span class="close" onclick="closeModal('videoModal')">&times;</span>
-            <h2 id="video-title">Detection Video</h2>
-            <video id="video-player" controls></video>
-        </div>
+        
+        <footer style="text-align: center; padding: 1.5rem; color: var(--gray-500); font-size: 0.9rem; margin-top: 2rem;">
+            <p>&copy; 2025 Smart Object Detection System</p>
+        </footer>
     </div>
 
     <!-- Details Modal -->
     <div id="detailsModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('detailsModal')">&times;</span>
-            <h2 id="details-title">Detection Details</h2>
+            <h2 id="details-title">
+                <span class="material-icons" style="vertical-align: middle; margin-right: 10px; color: var(--primary);">info</span>
+                Detection Details
+            </h2>
             <pre id="details-content"></pre>
         </div>
     </div>

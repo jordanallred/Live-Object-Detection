@@ -9,14 +9,11 @@ def create_directories():
     for dir_path in [
         CONFIG['save_dir'],
         os.path.join(CONFIG['save_dir'], 'images'),
-        os.path.join(CONFIG['save_dir'], 'clips'),
-        'static',
-        'static/css',
-        'static/js',
-        'templates',
-        'templates/components'
     ]:
         os.makedirs(dir_path, exist_ok=True)
+
+# Create models directory if it doesn't exist
+os.makedirs('models', exist_ok=True)
 
 # Configuration dictionary
 CONFIG = {
@@ -26,10 +23,27 @@ CONFIG = {
     'test_video_loop': True,  # Whether to loop the test video
     'detection_interval': 1,  # Seconds between detection runs
     'confidence_threshold': 0.5,  # Minimum confidence score for detections
-    'save_dir': 'detections',  # Directory to save detection clips and images
+    'save_dir': 'detections',  # Directory to save detection images
     'history_limit': 100,  # Maximum number of historical detections to keep
-    'clip_duration': 5,  # Seconds of video to save when object detected
+    
+    # Model settings
     'model_name': 'fasterrcnn_resnet50_fpn',  # Object detection model to use
+    'use_custom_model': False,  # Whether to use a custom model file
+    'custom_model_path': '',  # Path to custom model file
+    'custom_model_type': 'torchscript',  # Type of custom model: torchscript, onnx
+    'custom_model_labels_path': '',  # Path to labels file for custom model
+    
+    # Object detection settings
+    'enabled_objects': [  # List of object classes to detect, empty list means detect all
+        'car', 'truck'
+    ],
+    'detection_colors': {  # Colors for different object types (BGR format)
+        'default': (0, 255, 0),      # Green for most objects
+        'highlight': (0, 0, 255),    # Red for all detected objects
+        'vehicle': (255, 0, 0),      # Blue (not used but kept for compatibility)
+    },
+    'display_detection_boxes': False,  # Whether to show detection boxes on live feed
+    'detection_backoff': 10,  # Seconds to wait before triggering detection for the same object class
 }
 
 # COCO dataset class names

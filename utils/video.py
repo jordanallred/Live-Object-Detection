@@ -14,9 +14,10 @@ from config import CONFIG
 from utils.detector import ObjectDetector
 
 # Global variables
-frame_queue = queue.Queue(maxsize=30)
+frame_queue = queue.Queue(maxsize=60)  # Increased buffer for streaming frames
 detection_history = []
 current_frame = None
+latest_detections = None  # Store the most recent detection results
 processing_lock = threading.Lock()
 
 class VideoProcessor:
@@ -27,8 +28,95 @@ class VideoProcessor:
         self.camera = None
         self.last_detection_time = 0
         self.detector = ObjectDetector()
-        self.recording_clips = []
-        self.frame_buffer = {}  # Store frames for each recording
+        self.detection_thread = None
+        self.display_thread = None
+        self.stop_detection = False
+        self.stop_display = False
+        
+        # Performance monitoring
+        self.fps_capture = 0
+        self.fps_detection = 0
+        self.fps_display = 0
+        
+        # Detection backoff tracking
+        self.last_detection_by_class = {}  # Dictionary to track last detection time by class
+        
+        # Enhanced frame buffers with separate capture and display streams
+        self.raw_frame_buffer = queue.Queue(maxsize=5)  # Buffer for frames from camera
+        self.display_frame_buffer = queue.Queue(maxsize=5)  # Buffer for frames ready to display
+        
+    def detection_worker(self):
+        """Worker thread that processes frames for object detection separately."""
+        global latest_detections
+        
+        # Initialize performance monitoring
+        detection_count = 0
+        start_time = time.time()
+        
+        while not self.stop_detection:
+            try:
+                # Get a frame from the raw frame buffer with timeout
+                try:
+                    frame = self.raw_frame_buffer.get(timeout=0.1)
+                except queue.Empty:
+                    continue
+                
+                detection_start = time.time()
+                
+                # Detect objects
+                all_detections = self.detector.detect_objects(frame)
+                
+                # Apply detection backoff for each class
+                current_time = time.time()
+                filtered_detections = []
+                
+                for detection in all_detections:
+                    object_class = detection['class_name']
+                    # Check if this class is within backoff period
+                    if object_class in self.last_detection_by_class:
+                        last_time = self.last_detection_by_class[object_class]
+                        backoff_seconds = CONFIG.get('detection_backoff', 0)
+                        
+                        # Skip this detection if it's too soon after last detection of same class
+                        if current_time - last_time < backoff_seconds:
+                            continue
+                    
+                    # This detection passed the backoff check
+                    filtered_detections.append(detection)
+                    # Update the last detection time for this class
+                    self.last_detection_by_class[object_class] = current_time
+                
+                # Store the latest detections with a timestamp (all detections, not just filtered)
+                with processing_lock:
+                    latest_detections = {
+                        'detections': all_detections,  # Store all for display purposes
+                        'timestamp': current_time,
+                        'frame': frame
+                    }
+                
+                # If objects detected (after filtering), save image only
+                if filtered_detections:
+                    # Save detection image
+                    image_with_boxes = self.detector.draw_detections(frame.copy(), filtered_detections)
+                    self.save_detection_image(filtered_detections, image_with_boxes, current_time)
+                
+                # Update performance metrics
+                detection_count += 1
+                if detection_count % 10 == 0:  # Update FPS every 10 detections
+                    elapsed = time.time() - start_time
+                    if elapsed > 0:
+                        self.fps_detection = detection_count / elapsed
+                        if detection_count >= 100:  # Reset counter after 100 detections
+                            detection_count = 0
+                            start_time = time.time()
+                
+                # Mark task as done
+                self.raw_frame_buffer.task_done()
+                
+            except Exception as e:
+                print(f"Error in detection thread: {e}")
+                import traceback
+                traceback.print_exc()
 
     def open_camera(self):
         """Open the camera source or test video."""
@@ -65,256 +153,228 @@ class VideoProcessor:
         source_type = "Test video" if CONFIG['use_test_video'] else "Camera"
         print(f"{source_type} opened: {self.frame_width}x{self.frame_height} @ {self.fps} FPS")
 
-    def start_clip_recording(self, detections, frame):
+    def save_detection_image(self, detections, frame, detection_time=None):
         """
-        Start recording a video clip when objects are detected.
-
+        Save a detection image with bounding boxes.
+        
         Args:
             detections: List of detection dictionaries
-            frame: Current frame with detections
+            frame: Image with detection boxes drawn
+            detection_time: Optional timestamp of detection (defaults to now)
+        
+        Returns:
+            Dictionary with metadata about saved image
         """
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        # Generate timestamp
+        if detection_time is None:
+            detection_time = time.time()
+            
+        timestamp = datetime.datetime.fromtimestamp(detection_time).strftime("%Y%m%d_%H%M%S")
         filename = f"{timestamp}"
-
-        # Create unique names for the detection files
-        video_path = os.path.join(CONFIG['save_dir'], 'clips', f"{filename}.mp4")
+        
+        # Create paths
         image_path = os.path.join(CONFIG['save_dir'], 'images', f"{filename}.jpg")
         meta_path = os.path.join(CONFIG['save_dir'], 'images', f"{filename}.json")
-
-        # Save the detection frame as an image
+        
+        # Save the image
         cv2.imwrite(image_path, frame)
-
-        # Initialize frame buffer for this recording
-        recording_id = timestamp
-        self.frame_buffer[recording_id] = []
         
-        # Calculate how many frames we need to record the full clip duration
-        frames_needed = int(CONFIG['clip_duration'] * self.fps)
-        
-        # Store the first frame
-        self.frame_buffer[recording_id].append(frame.copy())
-        
-        # Make sure we have enough pre-allocated space for all frames to maintain duration
-        self.frame_buffer[recording_id] = [None] * frames_needed
-        self.frame_buffer[recording_id][0] = frame.copy()  # Store the first frame
-
-        print(f"Started recording: {video_path} - allocated buffer for {frames_needed} frames at {self.fps} FPS")
-
-        # Save initial metadata
+        # Create metadata
         metadata = {
             'timestamp': timestamp,
             'detections': detections,
-            'video_path': f"clips/{filename}.mp4",  # Use MP4 format
             'image_path': f"images/{filename}.jpg",
-            'id': recording_id
+            'id': timestamp
         }
-
-        # Write initial metadata
+        
+        # No video path since we're only saving images
+        metadata['video_path'] = None
+        
+        # Write metadata
         with open(meta_path, 'w') as f:
             json.dump(metadata, f)
-
-        # Add to recording clips list with end time
-        end_time = time.time() + CONFIG['clip_duration']
-        self.recording_clips.append({
-            'end_time': end_time,
-            'metadata': metadata,
-            'id': recording_id,
-            'video_path': video_path
-        })
-
+            
         # Add to detection history
         with processing_lock:
             detection_history.insert(0, metadata)
             # Limit history size
             while len(detection_history) > CONFIG['history_limit']:
                 detection_history.pop()
+                
+        return metadata
+        
+    # Video recording functionality has been removed
 
-    def update_recordings(self, frame):
-        """
-        Update active recordings and remove completed ones.
+    # Video recording functionality has been removed
 
-        Args:
-            frame: Current frame to add to active recordings
-        """
-        current_time = time.time()
-        completed = []
-
-        # Add frame to active recordings
-        for recording in self.recording_clips:
-            recording_id = recording['id']
-            if current_time <= recording['end_time']:
-                # Store frame in buffer
-                if recording_id in self.frame_buffer:
-                    # Calculate how far we are into the recording
-                    elapsed_time = current_time - (recording['end_time'] - CONFIG['clip_duration'])
-                    # Calculate which frame index this should be based on elapsed time
-                    frame_index = min(int(elapsed_time * self.fps), len(self.frame_buffer[recording_id]) - 1)
-                    # Store frame at the appropriate position to maintain correct duration
-                    if 0 <= frame_index < len(self.frame_buffer[recording_id]):
-                        self.frame_buffer[recording_id][frame_index] = frame.copy()
-            else:
-                completed.append(recording)
-
-        # Process and remove completed recordings
-        for recording in completed:
-            recording_id = recording['id']
-            video_path = recording['video_path']
-
-            # Check if we have frames to save
-            if recording_id in self.frame_buffer and len(self.frame_buffer[recording_id]) > 0:
-                frames = self.frame_buffer[recording_id]
-                print(f"Saving {len(frames)} frames to {video_path}")
-
-                # Create video writer using the MP4V codec as suggested
+    def display_worker(self):
+        """Worker thread that processes frames for display with detection overlays."""
+        global current_frame, latest_detections
+        
+        # Initialize performance monitoring
+        display_count = 0
+        start_time = time.time()
+        
+        while not self.stop_display:
+            try:
+                # Get a frame from the raw frame buffer with short timeout
                 try:
-                    # Use MP4V codec which works on Stack Overflow examples
-                    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                    writer = cv2.VideoWriter(
-                        video_path,
-                        fourcc,
-                        self.fps,  # Use native FPS instead of fixed value
-                        (self.frame_width, self.frame_height)
-                    )
-                    
-                    # Check if writer is initialized properly
-                    if not writer.isOpened():
-                        print(f"MP4V codec failed, trying alternative codec")
-                        writer.release()
-                        
-                        # Try with X264 codec
-                        fourcc = cv2.VideoWriter_fourcc(*'X264')
-                        writer = cv2.VideoWriter(
-                            video_path,
-                            fourcc,
-                            self.fps,  # Use native FPS
-                            (self.frame_width, self.frame_height)
-                        )
-                        
-                        # If that still doesn't work, try fallback to AVI
-                        if not writer.isOpened():
-                            writer.release()
-                            print(f"Falling back to AVI format: {video_path}")
-                            
-                            # Change to AVI format for compatibility
-                            video_path = video_path.replace('.mp4', '.avi')
-                            
-                            # Update metadata if needed
-                            for rec in self.recording_clips:
-                                if rec.get('video_path').endswith('.mp4'):
-                                    rec['video_path'] = rec['video_path'].replace('.mp4', '.avi')
-                                    if 'metadata' in rec:
-                                        rec['metadata']['video_path'] = rec['metadata']['video_path'].replace('.mp4', '.avi')
-                                        meta_file = os.path.join(CONFIG['save_dir'], 'images', f"{rec['id']}.json")
-                                        if os.path.exists(meta_file):
-                                            with open(meta_file, 'w') as f:
-                                                json.dump(rec['metadata'], f)
-                            
-                            # Use XVID with AVI (widely compatible)
-                            fourcc = cv2.VideoWriter_fourcc(*'XVID')
-                            writer = cv2.VideoWriter(
-                                video_path,
-                                fourcc,
-                                self.fps,  # Use native FPS
-                                (self.frame_width, self.frame_height)
+                    frame = self.raw_frame_buffer.get(timeout=0.01)
+                except queue.Empty:
+                    # If no new frames, sleep briefly to avoid CPU spinning
+                    time.sleep(0.001)
+                    continue
+                
+                # Store the original frame for global access
+                current_frame = frame.copy()
+                
+                # Create a working copy for display with detections
+                display_frame = frame.copy()
+                
+                # Draw latest detections on the frame if enabled and available
+                if CONFIG.get('display_detection_boxes', True) and latest_detections is not None:
+                    # Only use detections that aren't too old (within 2 detection intervals)
+                    current_time = time.time()
+                    max_age = CONFIG['detection_interval'] * 2
+                    if current_time - latest_detections['timestamp'] <= max_age:
+                        # Draw bounding boxes on the display frame
+                        if latest_detections['detections']:
+                            display_frame = self.detector.draw_detections(
+                                display_frame, latest_detections['detections']
                             )
+                
+                # Put processed frame in display buffer for web streaming
+                if not self.display_frame_buffer.full():
+                    self.display_frame_buffer.put(display_frame.copy())
                     
-                    # Write all frames at once
-                    if writer.isOpened():
-                        frame_count = 0
-                        first_frame = None
-                        # Find the first valid frame to use as a placeholder for any None frames
-                        for f in frames:
-                            if f is not None:
-                                first_frame = f
-                                break
-                                
-                        # If we have at least one valid frame, proceed with writing
-                        if first_frame is not None:
-                            for f in frames:
-                                # If a frame is None (not captured), use the previous valid frame
-                                if f is None:
-                                    writer.write(first_frame)
-                                else:
-                                    writer.write(f)
-                                    first_frame = f  # Update our placeholder frame
-                                frame_count += 1
-                                
-                        print(f"Completed recording: {video_path} - Saved {frame_count} frames")
-                    else:
-                        print(f"Failed to create video writer for {video_path}")
-                        
-                    # Release writer
-                    writer.release()
-                except Exception as e:
-                    print(f"Error writing video: {e}")
-
-                # Clean up buffer
-                del self.frame_buffer[recording_id]
-
-            # Remove from active recordings
-            self.recording_clips.remove(recording)
-
+                # Always update the global frame queue for web streaming
+                while frame_queue.full():
+                    # If queue is full, remove oldest frame
+                    try:
+                        frame_queue.get_nowait()
+                        frame_queue.task_done()
+                    except queue.Empty:
+                        break
+                
+                # Add the current frame to the queue
+                frame_queue.put(display_frame.copy())
+                
+                # Update performance metrics
+                display_count += 1
+                if display_count % 30 == 0:  # Update FPS every 30 frames
+                    elapsed = time.time() - start_time
+                    if elapsed > 0:
+                        self.fps_display = display_count / elapsed
+                        if display_count >= 300:  # Reset counter after 300 frames
+                            display_count = 0
+                            start_time = time.time()
+                
+                # Mark task as done
+                self.raw_frame_buffer.task_done()
+                
+            except Exception as e:
+                print(f"Error in display thread: {e}")
+                import traceback
+                traceback.print_exc()
+    
     def process_frame(self, frame):
         """
         Process a single frame with object detection.
+        This method is now primarily used for scheduling detection
+        at specified intervals.
 
         Args:
             frame: BGR image frame from the camera
 
         Returns:
-            Processed frame with detections drawn
+            Original frame (no longer needed but kept for compatibility)
         """
-        global current_frame
-
-        # Store the original frame
-        current_frame = frame.copy()
-
-        # Run object detection at specified intervals
+        # Sample frames for detection at specified intervals
         current_time = time.time()
         if current_time - self.last_detection_time >= CONFIG['detection_interval']:
             self.last_detection_time = current_time
+            
+            # Queue frame for asynchronous detection (non-blocking)
+            if not self.raw_frame_buffer.full():
+                self.raw_frame_buffer.put(frame.copy())
 
-            # Detect objects
-            detections = self.detector.detect_objects(frame)
-
-            # Draw detections on frame
-            if detections:
-                frame = self.detector.draw_detections(frame, detections)
-
-                # Start recording a clip if objects detected
-                self.start_clip_recording(detections, frame)
-
-        # Update any active recordings
-        self.update_recordings(frame)
-
-        return frame
+        return frame  # Return original frame (mostly for compatibility)
 
     def capture_and_process(self):
         """Continuously capture and process frames from the camera or test video."""
         try:
             self.open_camera()
+            
+            # Clear any old data in queues
+            while not self.raw_frame_buffer.empty():
+                try:
+                    self.raw_frame_buffer.get_nowait()
+                except queue.Empty:
+                    break
+                    
+            while not self.display_frame_buffer.empty():
+                try:
+                    self.display_frame_buffer.get_nowait()
+                except queue.Empty:
+                    break
+                    
+            # Start the worker threads
+            self.stop_detection = False
+            self.stop_display = False
+            
+            # Start detection thread
+            self.detection_thread = threading.Thread(
+                target=self.detection_worker, 
+                name="DetectionThread",
+                daemon=True
+            )
+            self.detection_thread.start()
+            print("Started object detection thread")
+            
+            # Start display processing thread
+            self.display_thread = threading.Thread(
+                target=self.display_worker,
+                name="DisplayThread",
+                daemon=True
+            )
+            self.display_thread.start()
+            print("Started display processing thread")
 
+            # Initialize capture performance monitoring
+            frame_count = 0
+            start_time = time.time()
+            fps_display_interval = 5  # seconds between FPS prints
+
+            print(f"Starting capture loop with camera FPS: {self.fps}")
             while True:
+                # Read frame from camera (this is now the only operation in the main thread loop)
                 ret, frame = self.camera.read()
+                
+                # Update capture FPS counter
+                frame_count += 1
+                elapsed = time.time() - start_time
+                if elapsed >= fps_display_interval:
+                    self.fps_capture = frame_count / elapsed
+                    print(f"Performance Metrics:")
+                    print(f"  Capture FPS: {self.fps_capture:.2f}")
+                    print(f"  Detection FPS: {self.fps_detection:.2f}")
+                    print(f"  Display FPS: {self.fps_display:.2f}")
+                    print(f"  Raw frame queue size: {self.raw_frame_buffer.qsize()}")
+                    print(f"  Display frame queue size: {self.display_frame_buffer.qsize()}")
+                    frame_count = 0
+                    start_time = time.time()
 
                 # Handle end of video for test videos
                 if not ret:
-                    if CONFIG['use_test_video'] and CONFIG['test_video_loop']:
+                    if CONFIG['use_test_video']:
                         print("End of test video reached. Restarting...")
-                        # Finish any active recordings
-                        current_time = time.time()
-                        for recording in list(self.recording_clips):  # Use a copy of the list
-                            recording['end_time'] = current_time - 1  # Make it end immediately
-
-                        # Process any completed recordings
-                        self.update_recordings(None)
-
-                        # Clear frame buffers
-                        self.frame_buffer = {}
-                        self.recording_clips = []
-
-                        # Restart camera
-                        self.open_camera()
+                        
+                        # Restart camera if loop is enabled
+                        if CONFIG['test_video_loop']:
+                            self.camera.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                        else:
+                            # Re-open camera (this will restart the video) 
+                            self.open_camera()
                         continue
                     else:
                         print("Error reading frame. Reconnecting...")
@@ -322,115 +382,59 @@ class VideoProcessor:
                         self.open_camera()
                         continue
 
-                # Process the frame
-                processed_frame = self.process_frame(frame)
-
-                # Put the processed frame in the queue for the web server
+                # Always feed the raw frame directly to the raw frame buffer
+                # to ensure worker threads have access to latest frames
+                if not self.raw_frame_buffer.full():
+                    self.raw_frame_buffer.put(frame.copy())
+                else:
+                    # If buffer is full, clear oldest frame
+                    try:
+                        self.raw_frame_buffer.get_nowait()
+                        self.raw_frame_buffer.task_done()
+                        # Now add the new frame
+                        self.raw_frame_buffer.put(frame.copy())
+                    except queue.Empty:
+                        pass
+                
+                # Also process frame for recordings
+                self.process_frame(frame)
+                
+                # For compatibility and immediate display, also feed directly to global frame queue
                 if not frame_queue.full():
-                    frame_queue.put(processed_frame)
+                    frame_queue.put(frame.copy())
 
-                # Add a slight delay when using test video to simulate real-time
+                # For test videos, respect the original fps to maintain proper playback speed
                 if CONFIG['use_test_video']:
-                    time.sleep(1/max(self.fps, 1))  # Ensure we don't divide by zero
+                    target_delay = 1/max(self.fps, 1)  # Time per frame in seconds
+                    time.sleep(target_delay)
 
         except Exception as e:
             print(f"Error in capture thread: {e}")
             import traceback
             traceback.print_exc()
         finally:
-            # Ensure we properly clean up resources
-            # Save any pending recordings
-            for recording in list(self.recording_clips):  # Use a copy of the list
-                recording_id = recording['id']
-                video_path = recording['video_path']
-
-                # Check if we have frames to save
-                if recording_id in self.frame_buffer and len(self.frame_buffer[recording_id]) > 0:
-                    frames = self.frame_buffer[recording_id]
-                    print(f"Saving {len(frames)} frames to {video_path} during shutdown")
-
-                    # Create video writer using the MP4V codec as suggested
-                    try:
-                        # Use MP4V codec which works on Stack Overflow examples
-                        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                        writer = cv2.VideoWriter(
-                            video_path,
-                            fourcc,
-                            self.fps,  # Use native FPS
-                            (self.frame_width, self.frame_height)
-                        )
-                        
-                        # Check if writer is initialized properly
-                        if not writer.isOpened():
-                            print(f"MP4V codec failed during shutdown, trying alternative codec")
-                            writer.release()
-                            
-                            # Try with X264 codec
-                            fourcc = cv2.VideoWriter_fourcc(*'X264')
-                            writer = cv2.VideoWriter(
-                                video_path,
-                                fourcc,
-                                self.fps,  # Use native FPS
-                                (self.frame_width, self.frame_height)
-                            )
-                            
-                            # If that still doesn't work, try fallback to AVI
-                            if not writer.isOpened():
-                                writer.release()
-                                print(f"Falling back to AVI format during shutdown: {video_path}")
-                                
-                                # Change to AVI format for compatibility
-                                video_path = video_path.replace('.mp4', '.avi')
-                                
-                                # Update metadata if needed
-                                for rec in self.recording_clips:
-                                    if rec.get('video_path').endswith('.mp4'):
-                                        rec['video_path'] = rec['video_path'].replace('.mp4', '.avi')
-                                        if 'metadata' in rec:
-                                            rec['metadata']['video_path'] = rec['metadata']['video_path'].replace('.mp4', '.avi')
-                                            meta_file = os.path.join(CONFIG['save_dir'], 'images', f"{rec['id']}.json")
-                                            if os.path.exists(meta_file):
-                                                with open(meta_file, 'w') as f:
-                                                    json.dump(rec['metadata'], f)
-                                
-                                # Use XVID with AVI (widely compatible)
-                                fourcc = cv2.VideoWriter_fourcc(*'XVID')
-                                writer = cv2.VideoWriter(
-                                    video_path,
-                                    fourcc,
-                                    self.fps,  # Use native FPS
-                                    (self.frame_width, self.frame_height)
-                                )
-                        
-                        # Write all frames at once
-                        if writer.isOpened():
-                            frame_count = 0
-                            first_frame = None
-                            # Find the first valid frame to use as a placeholder for any None frames
-                            for f in frames:
-                                if f is not None:
-                                    first_frame = f
-                                    break
-                                    
-                            # If we have at least one valid frame, proceed with writing
-                            if first_frame is not None:
-                                for f in frames:
-                                    # If a frame is None (not captured), use the previous valid frame
-                                    if f is None:
-                                        writer.write(first_frame)
-                                    else:
-                                        writer.write(f)
-                                        first_frame = f  # Update our placeholder frame
-                                    frame_count += 1
-                                    
-                            print(f"Completed shutdown recording: {video_path} - Saved {frame_count} frames")
-                        else:
-                            print(f"Failed to create video writer for {video_path}")
-                            
-                        # Release writer
-                        writer.release()
-                    except Exception as e:
-                        print(f"Error writing video during shutdown: {e}")
+            # Stop all worker threads
+            print("Stopping worker threads...")
+            
+            # Stop the detection thread if it's running
+            if self.detection_thread and self.detection_thread.is_alive():
+                print("Stopping detection thread...")
+                self.stop_detection = True
+                # Wait for the thread to finish (with timeout)
+                self.detection_thread.join(timeout=2.0)
+                print("Detection thread stopped" if not self.detection_thread.is_alive() 
+                     else "Detection thread timeout - continuing shutdown")
+                     
+            # Stop the display thread if it's running
+            if self.display_thread and self.display_thread.is_alive():
+                print("Stopping display thread...")
+                self.stop_display = True
+                # Wait for the thread to finish (with timeout)
+                self.display_thread.join(timeout=2.0)
+                print("Display thread stopped" if not self.display_thread.is_alive() 
+                     else "Display thread timeout - continuing shutdown")
+                
+            # Video recording cleanup has been removed
 
             # Release camera
             if self.camera is not None:
@@ -446,25 +450,43 @@ def generate_frames():
     Yields:
         JPEG-encoded frame bytes for Flask's Response
     """
+    print("Starting video stream generator")
+    
     while True:
+        # Get the frame from the global frame queue
         if not frame_queue.empty():
-            frame = frame_queue.get()
-
-            # Encode the frame as JPEG
-            ret, buffer = cv2.imencode('.jpg', frame)
-            if not ret:
-                continue
-
-            # Yield the frame in the format expected by Flask's Response
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+            try:
+                frame = frame_queue.get()
+                
+                # Encode the frame as JPEG
+                ret, buffer = cv2.imencode('.jpg', frame)
+                if ret:
+                    # Yield the frame in the format expected by Flask's Response
+                    yield (b'--frame\r\n'
+                          b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+                    
+                # Mark as done
+                frame_queue.task_done()
+            except Exception as e:
+                print(f"Error in frame streaming: {e}")
         else:
-            # If queue is empty, short delay before checking again
+            # If queue is empty, provide a short delay to prevent CPU spinning
             time.sleep(0.01)
 
 # Initialize and start the video processor thread
 def start_video_processor():
     """Initialize and start the video processor in a background thread."""
+    print("Starting video processor...")
     video_processor = VideoProcessor()
-    threading.Thread(target=video_processor.capture_and_process, daemon=True).start()
+    
+    # Start the capture thread with a name for easier identification
+    capture_thread = threading.Thread(
+        target=video_processor.capture_and_process, 
+        name="CaptureThread",
+        daemon=True
+    )
+    capture_thread.start()
+    print(f"Started capture thread: {capture_thread.name}")
+    
+    # Return the processor instance for reference
     return video_processor
