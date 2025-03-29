@@ -1,4 +1,4 @@
-# Smart Object Detection System
+# Live Object Detection System
 
 A modern, responsive home surveillance system with object detection capabilities and a user-friendly web interface.
 
@@ -32,8 +32,8 @@ A modern, responsive home surveillance system with object detection capabilities
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/smart-object-detection.git
-   cd smart-object-detection
+   git clone https://github.com/jordanallred/Live-Object-Detection.git
+   cd Live-Object-Detection
    ```
 
 2. Create a virtual environment and activate it:
@@ -122,7 +122,7 @@ CONFIG = {
 ## 🧩 Project Structure
 
 ```
-smart-object-detection/
+Live-Object-Detection/
 ├── app.py                  # Main Flask application
 ├── config.py               # Configuration settings
 ├── pyproject.toml          # Project metadata
