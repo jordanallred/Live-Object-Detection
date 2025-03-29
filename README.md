@@ -192,7 +192,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## ℹ️ Author
 
-Jordan Allred - [GitHub Profile](https://github.com/yourusername)
+Jordan Allred - [GitHub Profile](https://github.com/jordanallred)
 
 ---
 
