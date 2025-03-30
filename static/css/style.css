@@ -1075,3 +1075,70 @@ input:focus + .slider {
 input:checked + .slider:before {
     transform: translateX(26px);
 }
+
+/* Image modal specific styles - add these at the end of your style.css file */
+.image-modal-content {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: transparent;
+  box-shadow: none;
+  max-width: 95%;
+  max-height: 95%;
+  padding: 0;
+}
+
+.modal-image {
+  max-width: 90%;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: var(--border-radius);
+  box-shadow: var(--shadow-lg);
+  background-color: white;
+  transition: transform 0.3s ease;
+}
+
+.detection-img {
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.detection-img:hover {
+  transform: scale(1.02);
+}
+
+/* Animation for modal image */
+@keyframes zoomIn {
+  from {
+    transform: scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.modal-image {
+  animation: zoomIn 0.3s ease-out;
+}
+
+/* Add these styles to your style.css file */
+
+.model-info {
+  background: linear-gradient(to right, rgba(58, 134, 255, 0.1), rgba(58, 134, 255, 0.05));
+  border-left: 4px solid var(--primary);
+  display: flex;
+  align-items: center;
+}
+
+.model-info .material-icons {
+  color: var(--primary);
+  font-size: 22px;
+}
+
+/* Style for when both video and model info are displayed */
+.source-info + .source-info {
+  margin-top: -0.5rem;
+  margin-bottom: 1.5rem;
+}

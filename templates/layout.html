@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Advanced object detection and surveillance system">
     <meta name="theme-color" content="#3a86ff">
-    <title>Smart Object Detection System</title>
+    <title>Live Object Detection System</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
     <!-- Material Icons -->
@@ -14,7 +14,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1><span class="material-icons" style="vertical-align: middle; margin-right: 10px;">visibility</span> Smart Object Detection</h1>
+            <h1><span class="material-icons" style="vertical-align: middle; margin-right: 10px;">visibility</span> Live Object Detection</h1>
         </div>
 
         <div class="tabs">
@@ -35,7 +35,7 @@
         {% block content %}{% endblock %}
         
         <footer style="text-align: center; padding: 1.5rem; color: var(--gray-500); font-size: 0.9rem; margin-top: 2rem;">
-            <p>&copy; 2025 Smart Object Detection System</p>
+            <p>&copy; 2025 Live Object Detection System</p>
         </footer>
     </div>
 
@@ -48,6 +48,14 @@
                 Detection Details
             </h2>
             <pre id="details-content"></pre>
+        </div>
+    </div>
+
+    <!-- Image Modal -->
+    <div id="imageModal" class="modal">
+        <div class="modal-content image-modal-content">
+            <span class="close" onclick="closeModal('imageModal')">&times;</span>
+            <img id="modalImage" class="modal-image" src="" alt="Enlarged detection">
         </div>
     </div>
 

@@ -111,7 +111,6 @@ CONFIG = {
     'model_name': 'fasterrcnn_resnet50_fpn',  # Default torchvision model
     'use_custom_model': False,  # Set to True to use a custom model
     'custom_model_path': '',  # Path to custom model file
-    'custom_model_type': 'torchscript',  # 'torchscript' or 'onnx'
     'custom_model_labels_path': '',  # Path to custom model labels
     'enabled_objects': ['car', 'truck'],  # Objects to detect (empty for all)
     'display_detection_boxes': False,  # Show detection boxes on live feed

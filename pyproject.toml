@@ -1,5 +1,5 @@
 [project]
-name = "detection"
+name = "Live Object Detection"
 version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.12"

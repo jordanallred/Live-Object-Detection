@@ -1,305 +1,341 @@
 {% extends "layout.html" %}
 
 {% block content %}
-    <div id="live" class="content">
+<div id="live" class="content">
+    <div class="source-info">
+        <span class="material-icons" style="vertical-align: middle; margin-right: 5px;">movie</span>
+        <strong>Current input source:&nbsp;</strong>
         {% if use_test_video %}
-            <div class="source-info">
-                <span class="material-icons" style="vertical-align: middle; margin-right: 5px;">movie</span>
-                <strong>Currently using test video:</strong> {{ test_video_path }}
-            </div>
+        Video - {{ test_video_path }}
+        {% else %}
+        Camera {{ config.camera_source }}
         {% endif %}
-
-        <div class="video-container">
-            <img src="{{ url_for('video_feed') }}" class="video-feed" alt="Live Video Feed">
-        </div>
     </div>
 
-    <div id="history" class="content" style="display: none;">
-        <div class="history-header"
-             style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-            <h2 style="margin: 0; color: var(--primary-dark);">
-                <span class="material-icons" style="vertical-align: middle; margin-right: 8px;">history</span>
-                Detection History
-            </h2>
-            <div style="font-size: 0.9rem; color: var(--gray-500);">Showing detected objects</div>
-        </div>
-        <div class="history-container" id="detection-history">
-            <div style="display: flex; justify-content: center; padding: 3rem;">
-                <div class="loader"></div>
-                <span style="margin-left: 10px;">Loading detection history...</span>
-            </div>
-        </div>
+    <div class="source-info model-info">
+        <span class="material-icons" style="vertical-align: middle; margin-right: 5px;">model_training</span>
+        <strong>Current detection model:&nbsp;</strong>
+        {% if config.use_custom_model %}
+        Custom model - {{ config.custom_model_path.split('/')[-1] }}
+        {% else %}
+        {{ config.model_name.replace('_', ' ').title() }}
+        {% endif %}
     </div>
 
-    <div id="settings" class="content" style="display: none;">
-        <h2 style="margin-bottom: 1.5rem; color: var(--primary-dark);">
-            <span class="material-icons" style="vertical-align: middle; margin-right: 8px;">settings</span>
-            System Settings
+    <div class="video-container">
+        <img src="{{ url_for('video_feed') }}" class="video-feed" alt="Live Video Feed">
+    </div>
+</div>
+
+<div id="history" class="content" style="display: none;">
+    <div class="history-header"
+         style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h2 style="margin: 0; color: var(--primary-dark);">
+            <span class="material-icons"
+                  style="vertical-align: middle; margin-right: 8px;">history</span>
+            Detection History
         </h2>
+        <div style="font-size: 0.9rem; color: var(--gray-500);">Showing detected objects</div>
+    </div>
+    <div class="history-container" id="detection-history">
+        <div style="display: flex; justify-content: center; padding: 3rem;">
+            <div class="loader"></div>
+            <span style="margin-left: 10px;">Loading detection history...</span>
+        </div>
+    </div>
+</div>
 
-        <div class="config-section">
-            <h3>
-                <span class="material-icons" style="vertical-align: middle; margin-right: 5px; font-size: 20px;">videocam</span>
-                Video Source
-            </h3>
-            <form id="video-source-form" action="{{ url_for('update_config') }}" method="post">
-                <input type="hidden" name="form_id" value="video-source-form">
+<div id="settings" class="content" style="display: none;">
+    <h2 style="margin-bottom: 1.5rem; color: var(--primary-dark);">
+        <span class="material-icons"
+              style="vertical-align: middle; margin-right: 8px;">settings</span>
+        System Settings
+    </h2>
 
-                <div class="radio-group" style="margin-bottom: 1.5rem;">
-                    <div class="radio-option">
-                        <input type="radio" id="use-camera" name="video_source" value="camera"
-                               {% if not use_test_video %}checked{% endif %}>
-                        <label for="use-camera">Use Camera</label>
-                        <select name="camera_id" id="camera-select" {% if use_test_video %}disabled{% endif %}
-                                style="margin-left: 15px;">
-                            <option value="0" {% if config.camera_source == 0 %}selected{% endif %}>Webcam (0)</option>
-                            <option value="1" {% if config.camera_source == 1 %}selected{% endif %}>External Camera
-                                (1)
-                            </option>
-                            <option value="2" {% if config.camera_source == 2 %}selected{% endif %}>Other Camera (2)
-                            </option>
-                        </select>
-                    </div>
+    <div class="config-section">
+        <h3>
+            <span class="material-icons"
+                  style="vertical-align: middle; margin-right: 5px; font-size: 20px;">videocam</span>
+            Video Source
+        </h3>
+        <form id="video-source-form" action="{{ url_for('update_config') }}" method="post">
+            <input type="hidden" name="form_id" value="video-source-form">
 
-                    <div class="radio-option" style="margin-top: 0.75rem;">
-                        <input type="radio" id="use-test-video" name="video_source" value="test_video"
-                               {% if use_test_video %}checked{% endif %}>
-                        <label for="use-test-video">Use Test Video</label>
-                        <select name="test_video" id="test-video-select" {% if not use_test_video %}disabled{% endif %}
-                                style="margin-left: 15px;">
-                            <option value="{{ test_video_path }}" selected>{{ test_video_path }}</option>
-                        </select>
-                    </div>
+            <div class="radio-group" style="margin-bottom: 1.5rem;">
+                <div class="radio-option">
+                    <input type="radio" id="use-camera" name="video_source" value="camera"
+                           {% if not use_test_video %}checked{% endif %}>
+                    <label for="use-camera">Use Camera</label>
+                    <select name="camera_id" id="camera-select" {% if use_test_video %}disabled{%
+                            endif %}
+                            style="margin-left: 15px;">
+                        <option value="0" {% if config.camera_source== 0 %}selected{% endif %}>
+                            Webcam (0)
+                        </option>
+                        <option value="1" {% if config.camera_source== 1 %}selected{% endif %}>
+                            External Camera
+                            (1)
+                        </option>
+                        <option value="2" {% if config.camera_source== 2 %}selected{% endif %}>Other
+                            Camera (2)
+                        </option>
+                    </select>
                 </div>
 
-                <div class="upload-form">
-                    <h4>
+                <div class="radio-option" style="margin-top: 0.75rem;">
+                    <input type="radio" id="use-test-video" name="video_source" value="test_video"
+                           {% if use_test_video %}checked{% endif %}>
+                    <label for="use-test-video">Use Test Video</label>
+                    <select name="test_video" id="test-video-select" {% if not use_test_video
+                            %}disabled{% endif %}
+                            style="margin-left: 15px;">
+                        <option value="{{ test_video_path }}" selected>{{ test_video_path }}
+                        </option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="upload-form">
+                <h4>
                         <span class="material-icons"
                               style="vertical-align: middle; margin-right: 5px; font-size: 18px;">upload_file</span>
-                        Upload Test Video
-                    </h4>
-                    <div style="display: flex; flex-direction: column; gap: 10px;">
-                        <input type="file" id="video-upload" name="video_file" accept="video/*">
-                        <button type="button" onclick="uploadTestVideo()" class="btn"
-                                style="background-color: var(--primary); color: white; align-self: flex-start;">
+                    Upload Test Video
+                </h4>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <input type="file" id="video-upload" name="video_file" accept="video/*">
+                    <button type="button" onclick="uploadTestVideo()" class="btn"
+                            style="background-color: var(--primary); color: white; align-self: flex-start;">
                             <span class="material-icons"
                                   style="vertical-align: middle; font-size: 16px; margin-right: 4px;">upload</span>
-                            Upload
+                        Upload
+                    </button>
+                </div>
+            </div>
+
+            <div style="margin-top: 1.5rem;">
+                <button type="submit" class="btn btn-details">
+                        <span class="material-icons"
+                              style="vertical-align: middle; font-size: 16px; margin-right: 4px;">save</span>
+                    Save Changes
+                </button>
+                <div id="video-source-status" class="status-message"></div>
+            </div>
+        </form>
+    </div>
+
+    <div class="config-section">
+        <h3>
+            <span class="material-icons"
+                  style="vertical-align: middle; margin-right: 5px; font-size: 20px;">model_training</span>
+            Model Settings
+        </h3>
+        <form id="model-settings-form" action="{{ url_for('update_config') }}" method="post"
+              enctype="multipart/form-data">
+            <input type="hidden" name="form_id" value="model-settings-form">
+
+            <div class="form-group">
+                <div class="radio-group" style="margin-bottom: 1rem;">
+                    <div class="radio-option">
+                        <input type="radio" id="use-builtin-model" name="use_custom_model"
+                               value="false"
+                               {% if not config.use_custom_model %}checked{% endif %}
+                               onchange="toggleModelOptions()">
+                        <label for="use-builtin-model">Use Built-in Model</label>
+                    </div>
+                    <div style="margin-left: 25px; margin-top: 10px; {% if config.use_custom_model %}display: none;{% endif %}"
+                         id="builtin-model-options">
+                        <label for="model-name">Model Type:</label>
+                        <select name="model_name" id="model-name">
+                            <option value="fasterrcnn_resnet50_fpn"
+                                    {% if config.model_name==
+                            'fasterrcnn_resnet50_fpn' %}selected{% endif %}>
+                            Faster R-CNN ResNet-50 FPN
+                            </option>
+                            <option value="fasterrcnn_mobilenet_v3_large_fpn"
+                                    {% if config.model_name==
+                            'fasterrcnn_mobilenet_v3_large_fpn' %}selected{% endif %}>
+                            Faster R-CNN MobileNet V3
+                            </option>
+                            <option value="retinanet_resnet50_fpn"
+                                    {% if config.model_name==
+                            'retinanet_resnet50_fpn' %}selected{% endif %}>
+                            RetinaNet ResNet-50 FPN
+                            </option>
+                            <option value="ssd300_vgg16"
+                                    {% if config.model_name==
+                            'ssd300_vgg16' %}selected{% endif %}>SSD300 VGG16
+                            </option>
+                            <option value="ssdlite320_mobilenet_v3_large"
+                                    {% if config.model_name==
+                            'ssdlite320_mobilenet_v3_large' %}selected{% endif %}>
+                            SSDLite320 MobileNet V3
+                            </option>
+                        </select>
+                        <div style="margin-top: 0;">
+                            <small>Pre-trained models from torchvision with COCO dataset
+                                classes</small>
+                        </div>
+                    </div>
+
+                    <div class="radio-option" style="margin-top: 1rem;">
+                        <input type="radio" id="use-custom-model" name="use_custom_model"
+                               value="true"
+                               {% if config.use_custom_model %}checked{% endif %}
+                               onchange="toggleModelOptions()">
+                        <label for="use-custom-model">Use Custom YOLO Model</label>
+                    </div>
+
+                    <div style="margin-left: 25px; margin-top: 10px; {% if not config.use_custom_model %}display: none;{% endif %}"
+                         id="custom-model-options">
+                        <div style="margin-bottom: 15px;">
+                            <label for="custom-model-path">YOLO Model File Path:</label>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <input type="text" name="custom_model_path" id="custom-model-path"
+                                       value="{{ config.custom_model_path }}"
+                                       style="flex-grow: 1; padding: 8px;"
+                                       placeholder="e.g., /path/to/model.pt or models/yolov5.onnx">
+                                <button type="button" class="btn"
+                                        style="background-color: var(--primary); color: white;"
+                                        onclick="document.getElementById('model-file-upload').click()">
+                                    <span class="material-icons"
+                                          style="vertical-align: middle; font-size: 16px;">upload_file</span>
+                                </button>
+                            </div>
+                            <input type="file" id="model-file-upload" style="display: none;"
+                                   accept=".pt,.pth,.onnx,.torchscript"
+                                   onchange="handleModelFileSelect(this)">
+                        </div>
+
+                        <div style="margin-bottom: 15px;">
+                            <label for="custom-model-labels-path">Labels File Path
+                                (Optional):</label>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <input type="text" name="custom_model_labels_path"
+                                       id="custom-model-labels-path"
+                                       value="{{ config.custom_model_labels_path }}"
+                                       style="flex-grow: 1; padding: 8px;"
+                                       placeholder="e.g., /path/to/labels.json or models/classes.txt">
+                                <button type="button" class="btn"
+                                        style="background-color: var(--primary); color: white;"
+                                        onclick="document.getElementById('labels-file-upload').click()">
+                                    <span class="material-icons"
+                                          style="vertical-align: middle; font-size: 16px;">upload_file</span>
+                                </button>
+                            </div>
+                            <input type="file" id="labels-file-upload" style="display: none;"
+                                   accept=".json,.txt,.yaml,.yml"
+                                   onchange="handleLabelsFileSelect(this)">
+                            <div style="margin-left: 0.5rem;">
+                                <small>JSON or text file with class labels (one per line). If not
+                                    provided, COCO
+                                    classes will be used.</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top: 1rem;">
+                <button type="submit" class="btn btn-details">
+                        <span class="material-icons"
+                              style="vertical-align: middle; font-size: 16px; margin-right: 4px;">save</span>
+                    Save Model Settings
+                </button>
+                <div id="model-settings-status" class="status-message"></div>
+            </div>
+        </form>
+    </div>
+
+    <div class="config-section">
+        <h3>
+                <span class="material-icons"
+                      style="vertical-align: middle; margin-right: 5px; font-size: 20px;">tune</span>
+            Detection Settings
+        </h3>
+        <form id="detection-settings-form" action="{{ url_for('update_config') }}" method="post">
+            <input type="hidden" name="form_id" value="detection-settings-form">
+
+            <div class="form-group">
+                <label for="confidence-threshold">Confidence Threshold: <span id="confidence-value"
+                                                                              class="badge badge-primary">{{ config.confidence_threshold }}</span></label>
+                <div style="padding: 0.5rem 0;">
+                    <input type="range" id="confidence-threshold" name="confidence_threshold"
+                           min="0.1" max="0.9"
+                           step="0.05" value="{{ config.confidence_threshold }}">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <div class="form-row">
+                    <label for="detection-interval">Detection Interval:</label>
+                    <input type="number" id="detection-interval" name="detection_interval" min="0.5"
+                           max="10"
+                           step="0.5" value="{{ config.detection_interval }}">
+                    <span style="margin-left: 5px;">seconds</span>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <div class="form-row">
+                    <label for="detection-backoff">Detection Backoff:</label>
+                    <input type="number" id="detection-backoff" name="detection_backoff" min="0"
+                           max="60" step="1"
+                           value="{{ config.detection_backoff }}">
+                    <span style="margin-left: 5px;">seconds</span>
+                </div>
+            </div>
+
+            <div class="object-filters">
+                <h4 class="filter-heading">
+                    <span class="material-icons">filter_alt</span>
+                    Detection Filters
+                </h4>
+
+                <div class="display-option">
+                    <label class="switch">
+                        <input type="checkbox" id="display-detection-boxes"
+                               name="display_detection_boxes"
+                               value="true"
+                               {% if config.display_detection_boxes %}checked{% endif %}>
+                        <span class="slider"></span>
+                    </label>
+                    <label for="display-detection-boxes" style="margin-left: 10px;">Show detection
+                        boxes (disable to
+                        improve performance)</label>
+                </div>
+
+                <div class="objects-to-detect">
+                    <div class="heading-with-badge">
+                        <p>Objects to Detect</p>
+                        <span class="badge badge-primary"
+                              id="object-count-badge">{{ config.enabled_objects|length }} selected</span>
+                    </div>
+                    <div class="checkbox-group" id="objects-checkbox-group">
+                        <div class="loader-container">
+                            <div class="loader"></div>
+                            <span>Loading available objects...</span>
+                        </div>
+                    </div>
+                    <div class="object-filter-controls">
+                        <button type="button" class="btn btn-outline" id="select-all-objects">Select
+                            All
+                        </button>
+                        <button type="button" class="btn btn-outline" id="clear-all-objects">Clear
+                            All
                         </button>
                     </div>
                 </div>
+            </div>
 
-                <div style="margin-top: 1.5rem;">
-                    <button type="submit" class="btn btn-details">
+            <div style="margin-top: 1.5rem;">
+                <button type="submit" class="btn btn-details">
                         <span class="material-icons"
                               style="vertical-align: middle; font-size: 16px; margin-right: 4px;">save</span>
-                        Save Changes
-                    </button>
-                    <div id="video-source-status" class="status-message"></div>
-                </div>
-            </form>
-        </div>
-
-        <div class="config-section">
-            <h3>
-                <span class="material-icons" style="vertical-align: middle; margin-right: 5px; font-size: 20px;">model_training</span>
-                Model Settings
-            </h3>
-            <form id="model-settings-form" action="{{ url_for('update_config') }}" method="post"
-                  enctype="multipart/form-data">
-                <input type="hidden" name="form_id" value="model-settings-form">
-
-                <div class="form-group">
-                    <div class="radio-group" style="margin-bottom: 1rem;">
-                        <div class="radio-option">
-                            <input type="radio" id="use-builtin-model" name="use_custom_model" value="false"
-                                   {% if not config.use_custom_model %}checked{% endif %}
-                                   onchange="toggleModelOptions()">
-                            <label for="use-builtin-model">Use Built-in Model</label>
-                        </div>
-                        <div style="margin-left: 25px; margin-top: 10px; {% if config.use_custom_model %}display: none;{% endif %}"
-                             id="builtin-model-options">
-                            <label for="model-name">Model Type:</label>
-                            <select name="model_name" id="model-name">
-                                <option value="fasterrcnn_resnet50_fpn"
-                                        {% if config.model_name == 'fasterrcnn_resnet50_fpn' %}selected{% endif %}>
-                                    Faster R-CNN ResNet-50 FPN
-                                </option>
-                                <option value="fasterrcnn_mobilenet_v3_large_fpn"
-                                        {% if config.model_name == 'fasterrcnn_mobilenet_v3_large_fpn' %}selected{% endif %}>
-                                    Faster R-CNN MobileNet V3
-                                </option>
-                                <option value="retinanet_resnet50_fpn"
-                                        {% if config.model_name == 'retinanet_resnet50_fpn' %}selected{% endif %}>
-                                    RetinaNet ResNet-50 FPN
-                                </option>
-                                <option value="ssd300_vgg16"
-                                        {% if config.model_name == 'ssd300_vgg16' %}selected{% endif %}>SSD300 VGG16
-                                </option>
-                                <option value="ssdlite320_mobilenet_v3_large"
-                                        {% if config.model_name == 'ssdlite320_mobilenet_v3_large' %}selected{% endif %}>
-                                    SSDLite320 MobileNet V3
-                                </option>
-                            </select>
-                            <div style="margin-top: 0;">
-                                <small>Pre-trained models from torchvision with COCO dataset classes</small>
-                            </div>
-                        </div>
-
-                        <div class="radio-option" style="margin-top: 1rem;">
-                            <input type="radio" id="use-custom-model" name="use_custom_model" value="true"
-                                   {% if config.use_custom_model %}checked{% endif %}
-                                   onchange="toggleModelOptions()">
-                            <label for="use-custom-model">Use Custom Model</label>
-                        </div>
-
-                        <div style="margin-left: 25px; margin-top: 10px; {% if not config.use_custom_model %}display: none;{% endif %}"
-                             id="custom-model-options">
-                            <div style="margin-bottom: 15px;">
-                                <label for="custom-model-type">Model Format:</label>
-                                <select name="custom_model_type" id="custom-model-type">
-                                    <option value="torchscript"
-                                            {% if config.custom_model_type == 'torchscript' %}selected{% endif %}>
-                                        TorchScript
-                                    </option>
-                                    <option value="onnx" {% if config.custom_model_type == 'onnx' %}selected{% endif %}>
-                                        ONNX
-                                    </option>
-                                </select>
-                            </div>
-
-                            <div style="margin-bottom: 15px;">
-                                <label for="custom-model-path">Model File Path:</label>
-                                <div style="display: flex; align-items: center; gap: 10px;">
-                                    <input type="text" name="custom_model_path" id="custom-model-path"
-                                           value="{{ config.custom_model_path }}" style="flex-grow: 1; padding: 8px;"
-                                           placeholder="e.g., /path/to/model.pt or models/yolov5.onnx">
-                                    <button type="button" class="btn"
-                                            style="background-color: var(--primary); color: white;"
-                                            onclick="document.getElementById('model-file-upload').click()">
-                                        <span class="material-icons" style="vertical-align: middle; font-size: 16px;">upload_file</span>
-                                    </button>
-                                </div>
-                                <input type="file" id="model-file-upload" style="display: none;"
-                                       accept=".pt,.pth,.onnx,.torchscript" onchange="handleModelFileSelect(this)">
-                            </div>
-
-                            <div style="margin-bottom: 15px;">
-                                <label for="custom-model-labels-path">Labels File Path (Optional):</label>
-                                <div style="display: flex; align-items: center; gap: 10px;">
-                                    <input type="text" name="custom_model_labels_path" id="custom-model-labels-path"
-                                           value="{{ config.custom_model_labels_path }}"
-                                           style="flex-grow: 1; padding: 8px;"
-                                           placeholder="e.g., /path/to/labels.json or models/classes.txt">
-                                    <button type="button" class="btn"
-                                            style="background-color: var(--primary); color: white;"
-                                            onclick="document.getElementById('labels-file-upload').click()">
-                                        <span class="material-icons" style="vertical-align: middle; font-size: 16px;">upload_file</span>
-                                    </button>
-                                </div>
-                                <input type="file" id="labels-file-upload" style="display: none;"
-                                       accept=".json,.txt,.yaml,.yml" onchange="handleLabelsFileSelect(this)">
-                                <div style="margin-left: 0.5rem;">
-                                    <small>JSON or text file with class labels (one per line). If not provided, COCO
-                                        classes will be used.</small>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div style="margin-top: 1rem;">
-                    <button type="submit" class="btn btn-details">
-                        <span class="material-icons"
-                              style="vertical-align: middle; font-size: 16px; margin-right: 4px;">save</span>
-                        Save Model Settings
-                    </button>
-                    <div id="model-settings-status" class="status-message"></div>
-                </div>
-            </form>
-        </div>
-
-        <div class="config-section">
-            <h3>
-                <span class="material-icons"
-                      style="vertical-align: middle; margin-right: 5px; font-size: 20px;">tune</span>
-                Detection Settings
-            </h3>
-            <form id="detection-settings-form" action="{{ url_for('update_config') }}" method="post">
-                <input type="hidden" name="form_id" value="detection-settings-form">
-
-                <div class="form-group">
-                    <label for="confidence-threshold">Confidence Threshold: <span id="confidence-value"
-                                                                                  class="badge badge-primary">{{ config.confidence_threshold }}</span></label>
-                    <div style="padding: 0.5rem 0;">
-                        <input type="range" id="confidence-threshold" name="confidence_threshold" min="0.1" max="0.9"
-                               step="0.05" value="{{ config.confidence_threshold }}">
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <div class="form-row">
-                        <label for="detection-interval">Detection Interval:</label>
-                        <input type="number" id="detection-interval" name="detection_interval" min="0.5" max="10"
-                               step="0.5" value="{{ config.detection_interval }}">
-                        <span style="margin-left: 5px;">seconds</span>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <div class="form-row">
-                        <label for="detection-backoff">Detection Backoff:</label>
-                        <input type="number" id="detection-backoff" name="detection_backoff" min="0" max="60" step="1"
-                               value="{{ config.detection_backoff }}">
-                        <span style="margin-left: 5px;">seconds</span>
-                    </div>
-                </div>
-
-                <div class="object-filters">
-                    <h4 class="filter-heading">
-                        <span class="material-icons">filter_alt</span>
-                        Detection Filters
-                    </h4>
-
-                    <div class="display-option">
-                        <label class="switch">
-                            <input type="checkbox" id="display-detection-boxes" name="display_detection_boxes"
-                                   value="true"
-                                   {% if config.display_detection_boxes %}checked{% endif %}>
-                            <span class="slider"></span>
-                        </label>
-                        <label for="display-detection-boxes" style="margin-left: 10px;">Show detection boxes (disable to
-                            improve performance)</label>
-                    </div>
-
-                    <div class="objects-to-detect">
-                        <div class="heading-with-badge">
-                            <p>Objects to Detect</p>
-                            <span class="badge badge-primary"
-                                  id="object-count-badge">{{ config.enabled_objects|length }} selected</span>
-                        </div>
-                        <div class="checkbox-group" id="objects-checkbox-group">
-                            <div class="loader-container">
-                                <div class="loader"></div>
-                                <span>Loading available objects...</span>
-                            </div>
-                        </div>
-                        <div class="object-filter-controls">
-                            <button type="button" class="btn btn-outline" id="select-all-objects">Select All</button>
-                            <button type="button" class="btn btn-outline" id="clear-all-objects">Clear All</button>
-                        </div>
-                    </div>
-                </div>
-
-                <div style="margin-top: 1.5rem;">
-                    <button type="submit" class="btn btn-details">
-                        <span class="material-icons"
-                              style="vertical-align: middle; font-size: 16px; margin-right: 4px;">save</span>
-                        Save Detection Settings
-                    </button>
-                    <div id="detection-settings-status" class="status-message"></div>
-                </div>
-            </form>
-        </div>
+                    Save Detection Settings
+                </button>
+                <div id="detection-settings-status" class="status-message"></div>
+            </div>
+        </form>
     </div>
+</div>
 {% endblock %}

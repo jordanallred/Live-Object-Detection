@@ -4,6 +4,7 @@ Configuration settings for the home surveillance system.
 
 import os
 
+
 # Create required directories
 def create_directories():
     for dir_path in [
@@ -11,6 +12,7 @@ def create_directories():
         os.path.join(CONFIG['save_dir'], 'images'),
     ]:
         os.makedirs(dir_path, exist_ok=True)
+
 
 # Create models directory if it doesn't exist
 os.makedirs('models', exist_ok=True)
@@ -25,40 +27,39 @@ CONFIG = {
     'confidence_threshold': 0.5,  # Minimum confidence score for detections
     'save_dir': 'detections',  # Directory to save detection images
     'history_limit': 100,  # Maximum number of historical detections to keep
-    
+
     # Model settings
     'model_name': 'fasterrcnn_resnet50_fpn',  # Object detection model to use
-    'use_custom_model': False,  # Whether to use a custom model file
-    'custom_model_path': '',  # Path to custom model file
-    'custom_model_type': 'torchscript',  # Type of custom model: torchscript, onnx
+    'use_custom_model': True,  # Whether to use a custom model file
+    'custom_model_path': 'models/yolo11n.pt',  # Path to custom model file
     'custom_model_labels_path': '',  # Path to labels file for custom model
-    
+
     # Object detection settings
     'enabled_objects': [  # List of object classes to detect, empty list means detect all
         'car', 'truck'
     ],
     'detection_colors': {  # Colors for different object types (BGR format)
-        'default': (0, 255, 0),      # Green for most objects
-        'highlight': (0, 0, 255),    # Red for all detected objects
-        'vehicle': (255, 0, 0),      # Blue (not used but kept for compatibility)
+        'default': (0, 255, 0),  # Green for most objects
+        'highlight': (0, 0, 255),  # Red for all detected objects
     },
     'display_detection_boxes': False,  # Whether to show detection boxes on live feed
-    'detection_backoff': 10,  # Seconds to wait before triggering detection for the same object class
+    'detection_backoff': 10,
+    # Seconds to wait before triggering detection for the same object class
 }
 
 # COCO dataset class names
 COCO_CLASSES = [
     '__background__', 'person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
-    'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'N/A', 'stop sign',
+    'train', 'truck', 'boat', 'traffic light', 'fire hydrant', 'stop sign',
     'parking meter', 'bench', 'bird', 'cat', 'dog', 'horse', 'sheep', 'cow',
-    'elephant', 'bear', 'zebra', 'giraffe', 'N/A', 'backpack', 'umbrella', 'N/A', 'N/A',
+    'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella',
     'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball',
     'kite', 'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket',
-    'bottle', 'N/A', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl',
+    'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl',
     'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza',
-    'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'N/A', 'dining table',
-    'N/A', 'N/A', 'toilet', 'N/A', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone',
-    'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'N/A', 'book',
+    'donut', 'cake', 'chair', 'couch', 'potted plant', 'bed', 'dining table', 'toilet', 'tv',
+    'laptop', 'mouse', 'remote', 'keyboard', 'cell phone',
+    'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book',
     'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush'
 ]
 
