@@ -45,7 +45,7 @@ A modern, responsive home surveillance system with object detection capabilities
    ```bash
    uv pip install -r requirements.txt
    ```
-   Note: On Windows, `requirements.txt` will install `triton-windows` intead of `triton` for PyTorch compatibility.
+   Note: On Windows, `requirements.txt` will install [`triton-windows`](https://github.com/woct0rdho/triton-windows) intead of `triton` for PyTorch compatibility.
 
 
 
