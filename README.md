@@ -16,7 +16,7 @@ A modern, responsive home surveillance system with object detection capabilities
 - **Configurable Detection Settings**: Customize confidence thresholds, detection intervals, and object filters
 - **Object Filtering**: Select specific objects to detect (e.g., only cars and people)
 - **Detection History**: Browse through past detections with timestamps and object information
-- **Custom Model Support**: Use your own TorchScript or ONNX models with custom label sets
+- **Custom Model Support**: Use your own [YOLO](https://docs.ultralytics.com/models/) models with custom label sets
 - **Performance Optimization**: Configurable settings to balance detection quality and system resource usage
 
 ## 📋 Requirements
@@ -26,7 +26,6 @@ A modern, responsive home surveillance system with object detection capabilities
 - OpenCV
 - Flask
 - NumPy
-- Optional: ONNX Runtime (for ONNX model support)
 
 ## 🛠️ Installation
 
@@ -38,25 +37,20 @@ A modern, responsive home surveillance system with object detection capabilities
 
 2. Create a virtual environment and activate it:
    ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows, use: venv\Scripts\activate
+   uv venv .venv
+   source .venv/bin/activate  # On Windows, use: .venv\Scripts\activate
    ```
 
 3. Install the required packages:
    ```bash
-   pip install torch torchvision opencv-python flask numpy
-   ```
-
-4. Optional: Install ONNX Runtime for ONNX model support:
-   ```bash
-   pip install onnxruntime
+   uv pip install -r requirements
    ```
 
 ## 🚀 Quick Start
 
 1. Run the application:
    ```bash
-   python app.py
+   python3 app.py
    ```
 
 2. Open your web browser and navigate to:
@@ -83,7 +77,7 @@ A modern, responsive home surveillance system with object detection capabilities
   - SSDLite320
 
 - **Custom Models**: Upload and use your own models:
-  - Supported formats: TorchScript (.pt, .pth) and ONNX (.onnx)
+  - Supported formats: Any model supported by YOLO models
   - Optional custom label mapping file (JSON or TXT)
 
 ### Detection Settings
@@ -170,11 +164,8 @@ The system uses PyTorch's pre-trained detection models by default but can be con
 ## 📊 Future Enhancements
 
 - **Motion Detection**: Pre-filter frames with motion before running object detection
-- **Object Tracking**: Track detected objects across frames
 - **Alert System**: Email or push notifications for specific detected objects
-- **Cloud Integration**: Optional cloud storage for detection images
 - **Multi-camera Support**: Manage and view multiple camera streams
-- **Mobile App**: Companion mobile application for remote viewing
 - **Time-based Rules**: Configure different detection settings based on time of day
 - **Zone-based Detection**: Define specific areas of interest for detection
 
