@@ -1,6 +1,7 @@
 """
 Video processing module for the home surveillance system.
 """
+import logging
 
 import cv2
 import os
@@ -19,6 +20,8 @@ detection_history = []
 current_frame = None
 latest_detections = None  # Store the most recent detection results
 processing_lock = threading.Lock()
+
+logger = logging.getLogger("video")
 
 
 class NumpyJSONEncoder(json.JSONEncoder):
@@ -129,7 +132,7 @@ class VideoProcessor:
                 self.raw_frame_buffer.task_done()
 
             except Exception as e:
-                print(f"Error in detection thread: {e}")
+                logger.error(f"Error in detection thread: {e}")
                 import traceback
                 traceback.print_exc()
 
@@ -146,13 +149,13 @@ class VideoProcessor:
                 raise ValueError(f"Test video file not found: {video_path}")
 
             self.camera = cv2.VideoCapture(video_path)
-            print(f"Using test video: {video_path}")
+            logger.info(f"Using test video: {video_path}")
         else:
-            print(f"Using camera source: {CONFIG['camera_source']}")
+            logger.info(f"Using camera source: {CONFIG['camera_source']}")
             self.camera = cv2.VideoCapture(CONFIG['camera_source'])
 
         if not self.camera.isOpened():
-            raise ValueError(f"Could not open video source")
+            raise ValueError("Could not open video source")
 
         # Get video properties
         self.frame_width = int(self.camera.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -166,7 +169,7 @@ class VideoProcessor:
             'use_test_video'] else 0
 
         source_type = "Test video" if CONFIG['use_test_video'] else "Camera"
-        print(f"{source_type} opened: {self.frame_width}x{self.frame_height} @ {self.fps} FPS")
+        logger.info(f"{source_type} opened: {self.frame_width} x {self.frame_height} @ {self.fps} FPS")
 
     def save_detection_image(self, detections, frame, detection_time=None):
         """
@@ -287,7 +290,7 @@ class VideoProcessor:
                 self.raw_frame_buffer.task_done()
 
             except Exception as e:
-                print(f"Error in display thread: {e}")
+                logger.error(f"Error in display thread: {e}")
                 import traceback
                 traceback.print_exc()
 
@@ -343,7 +346,7 @@ class VideoProcessor:
                 daemon=True
             )
             self.detection_thread.start()
-            print("Started object detection thread")
+            logger.info("Started object detection thread")
 
             # Start display processing thread
             self.display_thread = threading.Thread(
@@ -352,14 +355,14 @@ class VideoProcessor:
                 daemon=True
             )
             self.display_thread.start()
-            print("Started display processing thread")
+            logger.info("Started display processing thread")
 
             # Initialize capture performance monitoring
             frame_count = 0
             start_time = time.time()
             fps_display_interval = 5  # seconds between FPS prints
 
-            print(f"Starting capture loop with camera FPS: {self.fps}")
+            logger.info(f"Starting capture loop with camera FPS: {self.fps}")
             while True:
                 # Read frame from camera (this is now the only operation in the main thread loop)
                 ret, frame = self.camera.read()
@@ -383,7 +386,7 @@ class VideoProcessor:
                             self.open_camera()
                         continue
                     else:
-                        print("Error reading frame. Reconnecting...")
+                        logger.error("Error reading frame. Reconnecting...")
                         time.sleep(1)
                         self.open_camera()
                         continue
@@ -415,29 +418,29 @@ class VideoProcessor:
                     time.sleep(target_delay)
 
         except Exception as e:
-            print(f"Error in capture thread: {e}")
+            logger.error(f"Error in capture thread: {e}")
             import traceback
             traceback.print_exc()
         finally:
             # Stop all worker threads
-            print("Stopping worker threads...")
+            logger.info("Stopping worker threads...")
 
             # Stop the detection thread if it's running
             if self.detection_thread and self.detection_thread.is_alive():
-                print("Stopping detection thread...")
+                logger.info("Stopping detection thread...")
                 self.stop_detection = True
                 # Wait for the thread to finish (with timeout)
                 self.detection_thread.join(timeout=2.0)
-                print("Detection thread stopped" if not self.detection_thread.is_alive()
+                logger.debug("Detection thread stopped" if not self.detection_thread.is_alive()
                       else "Detection thread timeout - continuing shutdown")
 
             # Stop the display thread if it's running
             if self.display_thread and self.display_thread.is_alive():
-                print("Stopping display thread...")
+                logger.info("Stopping display thread...")
                 self.stop_display = True
                 # Wait for the thread to finish (with timeout)
                 self.display_thread.join(timeout=2.0)
-                print("Display thread stopped" if not self.display_thread.is_alive()
+                logger.error("Display thread stopped" if not self.display_thread.is_alive()
                       else "Display thread timeout - continuing shutdown")
 
             # Video recording cleanup has been removed
@@ -447,7 +450,7 @@ class VideoProcessor:
                 try:
                     self.camera.release()
                 except Exception as e:
-                    print(f"Error releasing camera: {e}")
+                    logger.error(f"Error releasing camera: {e}")
 
 
 def generate_frames():
@@ -457,7 +460,7 @@ def generate_frames():
     Yields:
         JPEG-encoded frame bytes for Flask's Response
     """
-    print("Starting video stream generator")
+    logger.info("Starting video stream generator")
 
     while True:
         # Get the frame from the global frame queue
@@ -475,7 +478,7 @@ def generate_frames():
                 # Mark as done
                 frame_queue.task_done()
             except Exception as e:
-                print(f"Error in frame streaming: {e}")
+                logger.error(f"Error in frame streaming: {e}")
         else:
             # If queue is empty, provide a short delay to prevent CPU spinning
             time.sleep(0.01)
@@ -484,7 +487,7 @@ def generate_frames():
 # Initialize and start the video processor thread
 def start_video_processor():
     """Initialize and start the video processor in a background thread."""
-    print("Starting video processor...")
+    logger.info("Starting video processor...")
     video_processor = VideoProcessor()
 
     # Start the capture thread with a name for easier identification
@@ -494,7 +497,7 @@ def start_video_processor():
         daemon=True
     )
     capture_thread.start()
-    print(f"Started capture thread: {capture_thread.name}")
+    logger.info(f"Started capture thread: {capture_thread.name}")
 
     # Return the processor instance for reference
     return video_processor

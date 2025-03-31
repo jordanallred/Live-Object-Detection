@@ -11,8 +11,49 @@ from werkzeug.utils import secure_filename
 from utils.video import generate_frames, start_video_processor
 from config import CONFIG
 from utils.video import NumpyJSONEncoder
+from flask import cli
+from rich.logging import RichHandler
 
-# After initializing the Flask app, configure it to use your custom encoder for all JSON responses
+# Define standard log format
+LOG_FORMAT = "%(asctime)s - %(name)-8s - %(message)s"
+
+# Create a file handler for logs
+file_handler = logging.FileHandler("object-detection.log")
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(logging.Formatter(LOG_FORMAT))
+
+# Create a rich console handler
+console_handler = RichHandler(
+    show_time=False,  # Disable time (since it's in the formatter)
+    rich_tracebacks=True,  # Enable rich tracebacks for better error visibility
+    markup=True  # Allows color and formatting via rich markup
+)
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format=LOG_FORMAT,
+    handlers=[file_handler, console_handler]
+)
+
+logger = logging.getLogger("app")
+
+werkzeug_log_file = os.path.join(os.getcwd(), "werkzeug.log")
+
+# Create a file handler for Werkzeug logs
+flask_file_handler = logging.FileHandler(werkzeug_log_file)
+flask_file_handler.setLevel(logging.INFO)
+
+# Optional: Set a formatter for better log readability
+formatter = logging.Formatter(
+    '%(asctime)s - %(name)-8s - %(levelname)-8s - %(message)s'
+)
+flask_file_handler.setFormatter(formatter)
+
+# Get the Werkzeug logger and add the file handler
+werkzeug_logger = logging.getLogger('werkzeug')
+werkzeug_logger.handlers = [flask_file_handler]  # Remove other handlers
+werkzeug_logger.propagate = False  # Prevent duplicate logs
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -22,9 +63,9 @@ app.config['DETECTIONS_DIR'] = os.path.join(os.getcwd(),
                                             CONFIG['save_dir'])  # Absolute path to detections
 app.json_encoder = NumpyJSONEncoder
 
+
 # Global reference to the video processor for restart handling
 video_processor = None
-
 
 @app.route('/')
 def index():
@@ -39,7 +80,7 @@ def index():
 @app.route('/video_feed')
 def video_feed():
     """Route for streaming the processed video feed."""
-    print("Video feed route accessed")
+    logger.debug("Video feed route accessed")
     # Use a response object for streaming with proper encoding
     response = Response(
         generate_frames(),
@@ -105,7 +146,7 @@ def available_objects():
             'enabled_objects': enabled_objects
         })
     except Exception as e:
-        print(f"Error getting available objects: {e}")
+        logger.error(f"Error getting available objects: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({
@@ -130,13 +171,13 @@ def serve_detection_file(filename):
 
     # Check if file exists, log if not
     if not os.path.exists(file_path):
-        print(f"File not found: {file_path}")
-        print(f"Base directory: {base_dir}")
+        logger.warning(f"File not found: {file_path}")
+        logger.info(f"Base directory: {base_dir}")
         if '/' in filename:
             sub_dir = filename.split('/', 1)[0]
             sub_dir_path = os.path.join(base_dir, sub_dir)
             if os.path.exists(sub_dir_path):
-                print(f"Contents of {sub_dir_path}: {os.listdir(sub_dir_path)}")
+                logger.debug(f"Contents of {sub_dir_path}: {os.listdir(sub_dir_path)}")
         return f"File {filename} not found", 404
 
     # Determine mime type - only jpg images now
@@ -280,9 +321,9 @@ def update_config():
 
                 # Start a new video processor
                 video_processor = start_video_processor()
-                print("Video processor restarted with new configuration")
+                logger.info("Video processor restarted with new configuration")
             except Exception as e:
-                print(f"Error restarting video processor: {e}")
+                logger.error(f"Error restarting video processor: {e}")
                 import traceback
                 traceback.print_exc()
                 return jsonify({
@@ -379,6 +420,11 @@ def upload_labels():
     return jsonify({'success': False, 'error': 'Invalid request'})
 
 
+def custom_banner(debug: bool, app_name: str):
+    message = f"Running '{app_name}' in {'debug' if debug else 'production'} mode"
+    werkzeug_logger.info(message)
+
+
 if __name__ == '__main__':
     # Create package files to make imports work
     os.makedirs('utils', exist_ok=True)
@@ -387,7 +433,9 @@ if __name__ == '__main__':
 
     # Start the video processor in a separate thread
     video_processor = start_video_processor()
-    print(f"Main video processor initialized: {video_processor}")
+    logger.info(f"Main video processor initialized: {video_processor}")
+
+    cli.show_server_banner = custom_banner
 
     # Start the Flask app
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    app.run(host='0.0.0.0')

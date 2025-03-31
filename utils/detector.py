@@ -10,18 +10,11 @@ import logging
 import traceback
 from torchvision.models import detection
 from config import CONFIG, COCO_CLASSES
+import warnings
 
-# Set up logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler("detector_debug.log"),
-        logging.StreamHandler()
-    ]
-)
+warnings.filterwarnings("ignore", category=UserWarning)
+
 logger = logging.getLogger("detector")
-
 
 class ObjectDetector:
     """Handles object detection using a pretrained model."""
@@ -136,7 +129,7 @@ class ObjectDetector:
             else:
                 # Just set the model type for UI purposes
                 self.model_type = 'yolo'
-                logger.info(f"Initializing YOLO model for UI purposes only (not loading weights)")
+                logger.info("Initializing YOLO model for UI purposes only (not loading weights)")
 
             # Load custom labels if provided and if we couldn't get them from the model
             if (not hasattr(self, 'class_names') or not self.class_names) and CONFIG[
