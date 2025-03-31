@@ -13,7 +13,8 @@ setuptools~=78.1.0
 sympy~=1.13.1
 mpmath~=1.3.0
 torch~=2.6.0
-triton~=3.2.0
+triton>=3.2.0; platform_system == "Linux"
+triton-windows>=3.2.0; platform_system == "Windows"
 torchvision~=0.21.0
 fsspec~=2025.3.1
 networkx~=3.4.2

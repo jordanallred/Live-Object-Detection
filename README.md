@@ -43,8 +43,11 @@ A modern, responsive home surveillance system with object detection capabilities
 
 3. Install the required packages:
    ```bash
-   uv pip install -r requirements
+   uv pip install -r requirements.txt
    ```
+   Note: On Windows, `requirements.txt` will install `triton-windows` intead of `triton` for PyTorch compatibility.
+
+
 
 ## 🚀 Quick Start
 
