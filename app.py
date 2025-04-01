@@ -15,7 +15,7 @@ from flask import cli
 from rich.logging import RichHandler
 
 # Define standard log format
-LOG_FORMAT = "%(asctime)s - %(name)-8s - %(message)s"
+LOG_FORMAT = "%(asctime)-26s %(name)-12s %(message)s"
 
 # Create a file handler for logs
 file_handler = logging.FileHandler("object-detection.log")
@@ -45,9 +45,7 @@ flask_file_handler = logging.FileHandler(werkzeug_log_file)
 flask_file_handler.setLevel(logging.INFO)
 
 # Optional: Set a formatter for better log readability
-formatter = logging.Formatter(
-    '%(asctime)s - %(name)-8s - %(levelname)-8s - %(message)s'
-)
+formatter = logging.Formatter(LOG_FORMAT)
 flask_file_handler.setFormatter(formatter)
 
 # Get the Werkzeug logger and add the file handler
