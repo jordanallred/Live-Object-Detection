@@ -142,7 +142,7 @@ class VideoProcessor:
                 traceback.print_exc()
 
     def open_camera(self):
-        """Open the camera source or test video."""
+        """Open the camera source or test video with comprehensive codec support."""
         if self.camera is not None:
             self.camera.release()
 
@@ -153,33 +153,182 @@ class VideoProcessor:
             if not os.path.exists(video_path):
                 raise ValueError(f"Test video file not found: {video_path}")
 
-            self.camera = cv2.VideoCapture(video_path)
-            logger.info(f"Using test video: {video_path}")
+            # First attempt - try standard opening
+            logger.info(f"Opening test video: {video_path}")
+            self.camera = cv2.VideoCapture(video_path, cv2.CAP_FFMPEG)
+
+            # Check if camera opened successfully and can read a frame
+            success = self.camera.isOpened()
+            if success:
+                # Try to read a frame to verify codec works
+                ret, test_frame = self.camera.read()
+                if not ret:
+                    logger.warning(
+                        "Camera opened but couldn't read frame - potential codec issue"
+                    )
+                    success = False
+                    # Reset position to beginning
+                    self.camera.set(cv2.CAP_PROP_POS_FRAMES, 0)
+
+            # If standard opening failed, try codec-specific solutions
+            if not success:
+                logger.warning(
+                    "Failed to open video normally, attempting with alternative methods"
+                )
+                self.camera.release()
+
+                # Try to transcode the video to a more compatible format
+                try:
+                    import subprocess
+                    from shutil import which
+
+                    # Check if ffmpeg is available
+                    if which("ffmpeg") is None:
+                        logger.error("ffmpeg not found in PATH, cannot transcode video")
+                        raise FileNotFoundError("ffmpeg command not found")
+
+                    # Create a temporary file for the transcoded video
+                    import tempfile
+
+                    temp_dir = tempfile.gettempdir()
+                    temp_output = os.path.join(temp_dir, "transcoded_video.mp4")
+
+                    logger.info(f"Transcoding video to {temp_output}")
+
+                    # Transcode to H.264 which is widely supported
+                    cmd = [
+                        "ffmpeg",
+                        "-y",
+                        "-i",
+                        video_path,
+                        "-c:v",
+                        "libx264",
+                        "-preset",
+                        "ultrafast",
+                        "-pix_fmt",
+                        "yuv420p",  # Ensure pixel format compatibility
+                        "-g",
+                        "30",  # Keyframe every 30 frames for better seeking
+                        "-vf",
+                        "scale=trunc(iw/2)*2:trunc(ih/2)*2",  # Ensure dimensions are even
+                        "-an",  # No audio
+                        temp_output,
+                    ]
+
+                    logger.info(f"Running: {' '.join(cmd)}")
+                    process = subprocess.run(
+                        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+                    )
+
+                    # Log output for debugging
+                    if process.returncode != 0:
+                        logger.error(f"Transcoding failed: {process.stderr}")
+                    else:
+                        logger.info("Transcoding completed successfully")
+
+                        # Try opening the transcoded file
+                        self.camera = cv2.VideoCapture(temp_output, cv2.CAP_FFMPEG)
+                        if not self.camera.isOpened():
+                            logger.error("Failed to open transcoded video")
+                        else:
+                            logger.info("Successfully opened transcoded video")
+
+                            # Try reading a frame to confirm it works
+                            ret, frame = self.camera.read()
+                            if not ret:
+                                logger.error("Cannot read from transcoded video")
+                                self.camera.release()
+                            else:
+                                # Success! Use the transcoded video
+                                logger.info("Transcoded video working correctly")
+                                success = True
+
+                except Exception as e:
+                    logger.error(f"Error during video transcoding: {e}")
+                    import traceback
+
+                    logger.error(traceback.format_exc())
+
+                # If transcoding failed, try one more fallback method
+                if not success or not self.camera.isOpened():
+                    logger.warning("Trying one more method with explicit MJPG decoder")
+                    self.camera = cv2.VideoCapture(video_path, cv2.CAP_FFMPEG)
+                    if self.camera.isOpened():
+                        # Try forcing a different decoder
+                        self.camera.set(
+                            cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG")
+                        )
+                        self.camera.set(
+                            cv2.CAP_PROP_BUFFERSIZE, 10
+                        )  # Increase buffer size
         else:
-            logger.info(f"Using camera source: {CONFIG['camera_source']}")
-            self.camera = cv2.VideoCapture(CONFIG["camera_source"])
+            # Handle IP camera or webcam connections
+            if isinstance(CONFIG["camera_source"], str) and (
+                CONFIG["camera_source"].startswith("rtsp")
+                or CONFIG["camera_source"].startswith("http")
+            ):
+                logger.info(f"Connecting to IP camera: {CONFIG['camera_source']}")
+                # For IP cameras, use FFMPEG backend with tuned parameters
+                self.camera = cv2.VideoCapture(CONFIG["camera_source"], cv2.CAP_FFMPEG)
+                self.camera.set(
+                    cv2.CAP_PROP_BUFFERSIZE, 5
+                )  # Larger buffer for network streams
 
+                # Add a longer timeout for network cameras
+                connect_timeout = time.time() + 15  # 15-second timeout
+                while not self.camera.isOpened() and time.time() < connect_timeout:
+                    logger.info("Waiting for IP camera connection...")
+                    time.sleep(1)
+                    self.camera = cv2.VideoCapture(
+                        CONFIG["camera_source"], cv2.CAP_FFMPEG
+                    )
+            else:
+                # Regular webcam
+                logger.info(f"Using camera source: {CONFIG['camera_source']}")
+                self.camera = cv2.VideoCapture(CONFIG["camera_source"])
+
+        # Create fallback frame generator if we can't open the video source
         if not self.camera.isOpened():
-            raise ValueError("Could not open video source")
+            logger.error("Could not open any video source, using fallback mode")
 
-        # Get video properties
-        self.frame_width = int(self.camera.get(cv2.CAP_PROP_FRAME_WIDTH))
-        self.frame_height = int(self.camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        self.fps = self.camera.get(cv2.CAP_PROP_FPS)
-        if self.fps <= 0:
-            self.fps = 30  # Default to 30 FPS if unable to determine
+            # Create a black frame generator for placeholder
+            self._use_placeholder = True
+            self._placeholder_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+            cv2.putText(
+                self._placeholder_frame,
+                "No video available",
+                (100, 240),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1,
+                (255, 255, 255),
+                2,
+            )
 
-        # Store the total frame count for test videos
-        self.total_frames = (
-            int(self.camera.get(cv2.CAP_PROP_FRAME_COUNT))
-            if CONFIG["use_test_video"]
-            else 0
-        )
+            # Set default properties
+            self.frame_width, self.frame_height = 640, 480
+            self.fps = 10
+            self.total_frames = 0
+        else:
+            self._use_placeholder = False
 
-        source_type = "Test video" if CONFIG["use_test_video"] else "Camera"
-        logger.debug(
-            f"{source_type} opened: {self.frame_width} x {self.frame_height} @ {self.fps} FPS"
-        )
+            # Get video properties
+            self.frame_width = int(self.camera.get(cv2.CAP_PROP_FRAME_WIDTH))
+            self.frame_height = int(self.camera.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            self.fps = self.camera.get(cv2.CAP_PROP_FPS)
+            if self.fps <= 0 or self.fps > 60:  # Cap unreasonable FPS values
+                self.fps = 30
+
+            # Store total frames for test videos
+            self.total_frames = (
+                int(self.camera.get(cv2.CAP_PROP_FRAME_COUNT))
+                if CONFIG["use_test_video"]
+                else 0
+            )
+
+            source_type = "Test video" if CONFIG["use_test_video"] else "Camera"
+            logger.info(
+                f"{source_type} opened: {self.frame_width} x {self.frame_height} @ {self.fps} FPS"
+            )
 
     def save_detection_image(self, detections, frame, detection_time=None):
         """
