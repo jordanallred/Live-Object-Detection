@@ -177,7 +177,7 @@ class VideoProcessor:
         )
 
         source_type = "Test video" if CONFIG["use_test_video"] else "Camera"
-        logger.info(
+        logger.debug(
             f"{source_type} opened: {self.frame_width} x {self.frame_height} @ {self.fps} FPS"
         )
 
@@ -360,21 +360,21 @@ class VideoProcessor:
                 target=self.detection_worker, name="DetectionThread", daemon=True
             )
             self.detection_thread.start()
-            logger.info("Started object detection thread")
+            logger.info("Started object detection thread...")
 
             # Start display processing thread
             self.display_thread = threading.Thread(
                 target=self.display_worker, name="DisplayThread", daemon=True
             )
             self.display_thread.start()
-            logger.info("Started display processing thread")
+            logger.info("Started display processing thread...")
 
             # Initialize capture performance monitoring
             frame_count = 0
             start_time = time.time()
             fps_display_interval = 5  # seconds between FPS prints
 
-            logger.info(f"Starting capture loop with camera FPS: {self.fps}")
+            logger.debug(f"Starting capture loop with camera FPS: {self.fps}")
             while True:
                 # Read frame from camera (this is now the only operation in the main thread loop)
                 ret, frame = self.camera.read()
@@ -516,7 +516,7 @@ def start_video_processor():
         target=video_processor.capture_and_process, name="CaptureThread", daemon=True
     )
     capture_thread.start()
-    logger.info(f"Started capture thread: {capture_thread.name}")
+    logger.debug(f"Started capture thread: {capture_thread.name}")
 
     # Return the processor instance for reference
     return video_processor

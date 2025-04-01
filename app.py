@@ -448,7 +448,7 @@ if __name__ == "__main__":
 
     # Start the video processor in a separate thread
     video_processor = start_video_processor()
-    logger.info(f"Main video processor initialized: {video_processor}")
+    logger.debug(f"Main video processor initialized: {video_processor}")
 
     cli.show_server_banner = custom_banner
 

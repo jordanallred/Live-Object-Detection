@@ -5,7 +5,6 @@ Object detection module for the home surveillance system.
 import os
 import cv2
 import torch
-import json
 import logging
 import traceback
 from torchvision.models import detection
@@ -25,20 +24,20 @@ class ObjectDetector:
             initialize_full: If True, initialize the full model for detection.
                             If False, just load class names for UI purposes.
         """
-        logger.info("Initializing object detector")
+        logger.info("Initializing object detector...")
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        logger.info(f"Using device: {self.device}")
+        logger.debug(f"Using device: {self.device}")
 
         # Load class labels based on model type
         if CONFIG["use_custom_model"]:
-            logger.info("Using custom model configuration")
+            logger.debug("Using custom model configuration")
             self.load_custom_model(initialize_full)
         else:
-            logger.info("Using built-in torchvision model")
+            logger.debug("Using built-in torchvision model")
             self.load_torchvision_model(initialize_full)
 
         if initialize_full:
-            logger.info(f"Model loaded successfully on {self.device}")
+            logger.debug(f"Model loaded successfully on {self.device}")
             if hasattr(self, "class_names"):
                 logger.info(f"Available classes: {len(self.class_names)}")
                 logger.debug(f"Class names: {self.class_names[:20]}...")
@@ -50,41 +49,149 @@ class ObjectDetector:
                 logger.info("All objects enabled for detection")
 
     def load_torchvision_model(self, initialize_full=True):
-        """Load a pre-trained model from torchvision.
-
-        Args:
-            initialize_full: If True, initialize the full model for detection.
-                            If False, just set class names for UI purposes.
-        """
+        """Load a pre-trained model from torchvision with proper class names extraction."""
         try:
-            logger.info(f"Loading torchvision model: {CONFIG['model_name']}")
+            model_name = CONFIG["model_name"]
+            logger.debug(f"Loading torchvision model: {model_name}")
 
+            # Map model names to their respective weights classes
+            weights_map = {
+                "fasterrcnn_resnet50_fpn": detection.FasterRCNN_ResNet50_FPN_Weights.DEFAULT,
+                "fasterrcnn_mobilenet_v3_large_fpn": detection.FasterRCNN_MobileNet_V3_Large_FPN_Weights.DEFAULT,
+                "retinanet_resnet50_fpn": detection.RetinaNet_ResNet50_FPN_Weights.DEFAULT,
+                "ssd300_vgg16": detection.SSD300_VGG16_Weights.DEFAULT,
+                "ssdlite320_mobilenet_v3_large": detection.SSDLite320_MobileNet_V3_Large_Weights.DEFAULT,
+            }
+
+            if model_name not in weights_map:
+                logger.warning(
+                    f"Unknown model name: {model_name}, defaulting to fasterrcnn_resnet50_fpn"
+                )
+                model_name = "fasterrcnn_resnet50_fpn"
+
+            # Get the weights for this model
+            weights = weights_map[model_name]
+
+            # Try to extract class names from weights metadata
+            self.class_names = ["__background__"]  # Start with background class
+
+            try:
+                if hasattr(weights, "meta"):
+                    logger.debug(f"Checking weights metadata: {weights.meta.keys()}")
+
+                    # Different models might store categories differently
+                    if "categories" in weights.meta:
+                        categories = weights.meta["categories"]
+
+                        if isinstance(categories, list):
+                            self.class_names.extend(categories)
+                            logger.info(
+                                f"Added {len(categories)} classes from weights metadata list"
+                            )
+                        elif isinstance(categories, dict):
+                            # Sort by key if keys are numeric
+                            sorted_items = sorted(
+                                categories.items(), key=lambda x: int(x[0])
+                            )
+                            self.class_names.extend([item[1] for item in sorted_items])
+                            logger.info(
+                                f"Added {len(sorted_items)} classes from sorted dict"
+                            )
+
+                    # For SSD models which might use different metadata format
+                    elif "class_labels" in weights.meta:
+                        class_labels = weights.meta["class_labels"]
+                        self.class_names.extend(class_labels)
+                        logger.info(
+                            f"Added {len(class_labels)} classes from class_labels metadata"
+                        )
+
+                    # Look for COCO_CATEGORIES if model uses that
+                    elif "COCO_CATEGORIES" in dir(weights.meta):
+                        coco_cats = weights.meta.COCO_CATEGORIES
+                        self.class_names.extend(coco_cats)
+                        logger.info(
+                            f"Added {len(coco_cats)} classes from COCO_CATEGORIES"
+                        )
+
+                    # Try to import the specific weights module to get categories
+                    else:
+                        logger.info("Looking for model-specific category definitions")
+                        if model_name == "ssd300_vgg16":
+                            # For SSD300, try to import the specific label mapping
+                            from torchvision.models.detection.ssd import (
+                                _COCO_CATEGORIES,
+                            )
+
+                            self.class_names = ["__background__"] + list(
+                                _COCO_CATEGORIES
+                            )
+                            logger.info(
+                                f"Loaded {len(_COCO_CATEGORIES)} SSD-specific classes"
+                            )
+
+                        elif "category_mapping" in weights.meta:
+                            # Some models might have this
+                            self.class_names = ["__background__"] + list(
+                                weights.meta.category_mapping.values()
+                            )
+                            logger.info("Loaded classes from category_mapping")
+
+                # If we still don't have class names or only background
+                if len(self.class_names) <= 1:
+                    logger.warning(
+                        "Could not extract class names from weights metadata, using COCO classes"
+                    )
+                    self.class_names = COCO_CLASSES
+
+                logger.debug(
+                    f"Final class list contains {len(self.class_names)} classes"
+                )
+                logger.debug(f"First 10 classes: {self.class_names[:10]}")
+
+            except Exception as e:
+                logger.error(f"Error extracting class names: {e}")
+                logger.error(traceback.format_exc())
+                self.class_names = COCO_CLASSES
+                logger.warning("Using default COCO classes as fallback")
+
+            # Initialize the model if needed
             if initialize_full:
-                self.model = detection.__dict__[CONFIG["model_name"]]()
+                logger.info(f"Initializing {model_name} with pretrained weights")
+
+                # Create model with weights
+                if model_name == "fasterrcnn_resnet50_fpn":
+                    self.model = detection.fasterrcnn_resnet50_fpn(weights=weights)
+                elif model_name == "fasterrcnn_mobilenet_v3_large_fpn":
+                    self.model = detection.fasterrcnn_mobilenet_v3_large_fpn(
+                        weights=weights
+                    )
+                elif model_name == "retinanet_resnet50_fpn":
+                    self.model = detection.retinanet_resnet50_fpn(weights=weights)
+                elif model_name == "ssd300_vgg16":
+                    self.model = detection.ssd300_vgg16(weights=weights)
+                elif model_name == "ssdlite320_mobilenet_v3_large":
+                    self.model = detection.ssdlite320_mobilenet_v3_large(
+                        weights=weights
+                    )
+
+                # Move to device and set to eval mode
                 self.model.to(self.device)
                 self.model.eval()
-                logger.info(
-                    f"Torchvision model {CONFIG['model_name']} loaded successfully"
-                )
+                logger.info("Model initialized and set to evaluation mode")
 
-            self.class_names = COCO_CLASSES
             self.model_type = "torchvision"
-            logger.info(f"Using {len(self.class_names)} COCO class names")
+
         except Exception as e:
             logger.error(f"Error loading torchvision model: {str(e)}")
             logger.error(traceback.format_exc())
+            self.class_names = COCO_CLASSES
+            self.model_type = "torchvision"
             raise
 
     def load_custom_model(self, initialize_full=True):
-        """Load a custom YOLO model using ultralytics library.
-
-        Args:
-            initialize_full: If True, initialize the full model for detection.
-                            If False, just load class names for UI purposes.
-        """
+        """Load a custom YOLO model using ultralytics library with improved class name handling."""
         model_path = CONFIG["custom_model_path"]
-
-        logger.info(f"Loading custom YOLO model: {model_path}")
 
         if not os.path.exists(model_path):
             logger.error(f"Custom model file not found at {model_path}")
@@ -93,30 +200,47 @@ class ObjectDetector:
             return
 
         try:
-            # Use ultralytics YOLO for custom models
+            # Set model type for reference
+            self.model_type = "yolo"
+
+            # Initialize class_names to None - we'll fill it in order of priority
+            self.class_names = None
+
+            # PRIORITY 1: Load the full model and get class names directly from it
             if initialize_full:
                 try:
-                    # Import ultralytics YOLO
                     from ultralytics import YOLO
 
                     logger.info(f"Loading YOLO model from {model_path}")
                     self.model = YOLO(model_path)
-                    self.model_type = "yolo"
 
-                    # Get class names from the model
-                    if hasattr(self.model, "names"):
-                        self.class_names = list(self.model.names.values())
-                        logger.info(
+                    # Get class names from the model's names attribute
+                    if hasattr(self.model, "names") and self.model.names:
+                        # Check if names is a dict with int keys (typical YOLO format)
+                        if isinstance(self.model.names, dict) and all(
+                            isinstance(k, int) for k in self.model.names.keys()
+                        ):
+                            # Convert dict to list ensuring proper index order
+                            max_idx = max(self.model.names.keys())
+                            class_list = ["unknown"] * (
+                                max_idx + 1
+                            )  # Initialize with placeholders
+                            for idx, name in self.model.names.items():
+                                class_list[idx] = name
+                            self.class_names = class_list
+                        elif isinstance(self.model.names, dict):
+                            # If keys aren't all integers, just use values
+                            self.class_names = list(self.model.names.values())
+                        else:
+                            # If it's already a list
+                            self.class_names = self.model.names
+
+                        logger.debug(
                             f"Using class names from YOLO model: {len(self.class_names)} classes"
                         )
-                        logger.debug(f"Class names: {self.class_names[:10]}...")
-                    else:
-                        # Fall back to COCO classes if model doesn't have names
-                        logger.warning(
-                            "Model doesn't have class names attribute, using COCO classes"
+                        logger.debug(
+                            f"Class names from model: {self.class_names[:10]}..."
                         )
-                        self.class_names = COCO_CLASSES
-
                 except ImportError:
                     logger.error(
                         "ultralytics not installed. Please install with: pip install ultralytics"
@@ -127,116 +251,91 @@ class ObjectDetector:
                 except Exception as e:
                     logger.error(f"Error loading YOLO model: {e}")
                     logger.error(traceback.format_exc())
-                    logger.info("Falling back to torchvision model")
-                    self.load_torchvision_model(initialize_full)
-                    return
-            else:
-                # Just set the model type for UI purposes
-                self.model_type = "yolo"
-                logger.info(
-                    "Initializing YOLO model for UI purposes only (not loading weights)"
-                )
+                    # Continue to try other methods of getting class names
 
-            # Load custom labels if provided and if we couldn't get them from the model
-            if (
-                (not hasattr(self, "class_names") or not self.class_names)
-                and CONFIG["custom_model_labels_path"]
-                and os.path.exists(CONFIG["custom_model_labels_path"])
-            ):
-                logger.info(
-                    f"Loading custom labels from {CONFIG['custom_model_labels_path']}"
-                )
-                try:
-                    with open(CONFIG["custom_model_labels_path"], "r") as f:
-                        # Try to load as JSON
+            # PRIORITY 2: Try to load from custom labels file
+            if (self.class_names is None or len(self.class_names) == 0) and CONFIG[
+                "custom_model_labels_path"
+            ]:
+                labels_path = CONFIG["custom_model_labels_path"]
+                if os.path.exists(labels_path):
+                    logger.info(f"Loading custom labels from {labels_path}")
+                    try:
+                        self.class_names = self._parse_labels_file(labels_path)
+                        if self.class_names:
+                            logger.info(
+                                f"Successfully loaded {len(self.class_names)} classes from {labels_path}"
+                            )
+                            logger.debug(f"First 10 classes: {self.class_names[:10]}")
+                    except Exception as e:
+                        logger.error(f"Error loading custom labels file: {e}")
+                        self.class_names = None
+
+            # PRIORITY 3: Look for a labels.txt file in the same directory as the model
+            if self.class_names is None or len(self.class_names) == 0:
+                model_dir = os.path.dirname(model_path)
+                for label_filename in [
+                    "labels.txt",
+                    "classes.txt",
+                    "names.txt",
+                    "coco.names",
+                ]:
+                    potential_path = os.path.join(model_dir, label_filename)
+                    if os.path.exists(potential_path):
+                        logger.info(f"Found potential labels file at {potential_path}")
                         try:
-                            labels_data = json.load(f)
-                            logger.debug(
-                                f"Loaded labels data as JSON: {type(labels_data)}"
-                            )
+                            self.class_names = self._parse_labels_file(potential_path)
+                            if self.class_names:
+                                logger.info(
+                                    f"Successfully loaded {len(self.class_names)} classes from {potential_path}"
+                                )
+                                break
+                        except Exception as e:
+                            logger.error(f"Error loading potential labels file: {e}")
+                            continue
 
-                            if isinstance(labels_data, list):
-                                self.class_names = labels_data
-                                logger.debug(
-                                    f"Using label list directly: {self.class_names[:10]}..."
+            # PRIORITY 4: Look for a *.yaml file in the same directory (YOLO format)
+            if self.class_names is None or len(self.class_names) == 0:
+                model_dir = os.path.dirname(model_path)
+                yaml_files = [f for f in os.listdir(model_dir) if f.endswith(".yaml")]
+                for yaml_file in yaml_files:
+                    yaml_path = os.path.join(model_dir, yaml_file)
+                    try:
+                        import yaml
+
+                        with open(yaml_path, "r") as f:
+                            yaml_data = yaml.safe_load(f)
+                            if isinstance(yaml_data, dict) and "names" in yaml_data:
+                                if isinstance(yaml_data["names"], list):
+                                    self.class_names = yaml_data["names"]
+                                elif isinstance(yaml_data["names"], dict):
+                                    # Convert dict to ordered list
+                                    max_idx = max(
+                                        int(k) for k in yaml_data["names"].keys()
+                                    )
+                                    class_list = ["unknown"] * (max_idx + 1)
+                                    for idx, name in yaml_data["names"].items():
+                                        class_list[int(idx)] = name
+                                    self.class_names = class_list
+                                logger.info(
+                                    f"Loaded {len(self.class_names)} classes from YAML file {yaml_path}"
                                 )
-                            elif isinstance(labels_data, dict):
-                                # If it's a dict, we expect a key 'labels' or 'classes'
-                                logger.debug(
-                                    f"Label data is dict with keys: {labels_data.keys()}"
-                                )
-                                if "labels" in labels_data:
-                                    self.class_names = labels_data["labels"]
-                                    logger.debug("Using 'labels' key from dict")
-                                elif "classes" in labels_data:
-                                    self.class_names = labels_data["classes"]
-                                    logger.debug("Using 'classes' key from dict")
-                                elif "names" in labels_data:
-                                    self.class_names = labels_data["names"]
-                                    logger.debug("Using 'names' key from dict")
-                                else:
-                                    # Use dict keys if they're integers or try values
-                                    try:
-                                        # Try to convert keys to ints and sort
-                                        logger.debug(
-                                            "Attempting to convert dict keys to class indices"
-                                        )
-                                        id_to_name = {
-                                            int(k): v
-                                            for k, v in labels_data.items()
-                                            if k.isdigit()
-                                        }
-                                        max_id = max(id_to_name.keys())
-                                        logger.debug(
-                                            f"Found {len(id_to_name)} class mappings, max index: {max_id}"
-                                        )
-                                        self.class_names = [
-                                            id_to_name.get(i, f"class_{i}")
-                                            for i in range(0, max_id + 1)
-                                        ]
-                                        logger.debug(
-                                            f"Created class list: {self.class_names[:10]}..."
-                                        )
-                                    except (ValueError, AttributeError) as e:
-                                        # If keys aren't all integers, use values
-                                        logger.debug(
-                                            f"Couldn't convert keys to indices: {e}"
-                                        )
-                                        logger.debug("Using dict values as class names")
-                                        self.class_names = list(labels_data.values())
-                        except json.JSONDecodeError:
-                            # If not JSON, try to load as text file with one class per line
-                            logger.debug(
-                                "JSON parsing failed, trying to load as text file"
-                            )
-                            f.seek(0)  # Go back to start of file
-                            lines = f.read().splitlines()
-                            self.class_names = [
-                                line.strip() for line in lines if line.strip()
-                            ]
-                            logger.debug(
-                                f"Loaded {len(self.class_names)} classes from text file"
-                            )
-                except Exception as e:
-                    logger.error(f"Error loading custom labels: {e}")
-                    logger.error(traceback.format_exc())
-                    logger.info("Using generic class names")
-                    self.class_names = [
-                        f"class_{i}" for i in range(100)
-                    ]  # Default to generic class names
-            elif not hasattr(self, "class_names") or not self.class_names:
-                # If no labels file, use COCO classes as default
-                logger.info("No custom labels file provided, using COCO classes")
+                                break
+                    except Exception as e:
+                        logger.error(f"Error parsing YAML file {yaml_path}: {e}")
+                        continue
+
+            # FINAL FALLBACK: Use COCO classes if nothing else worked
+            if self.class_names is None or len(self.class_names) == 0:
+                logger.warning(
+                    "Could not load custom class names from any source, using COCO classes"
+                )
                 self.class_names = COCO_CLASSES
 
-            if initialize_full:
-                logger.info(f"Successfully loaded custom YOLO model from {model_path}")
-            if hasattr(self, "class_names"):
-                logger.info(f"Using {len(self.class_names)} class labels")
-                logger.debug(f"First 10 class labels: {self.class_names[:10]}")
+            logger.debug(f"Final class list contains {len(self.class_names)} classes")
 
         except Exception as e:
-            logger.error(f"Error loading custom model: {e}")
+            logger.error(f"Error in custom model loading: {e}")
             logger.error(traceback.format_exc())
             logger.info("Falling back to torchvision model")
             self.load_torchvision_model(initialize_full)
