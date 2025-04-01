@@ -1,6 +1,7 @@
 """
 Video processing module for the home surveillance system.
 """
+
 import logging
 
 import cv2
@@ -60,7 +61,9 @@ class VideoProcessor:
 
         # Enhanced frame buffers with separate capture and display streams
         self.raw_frame_buffer = queue.Queue(maxsize=5)  # Buffer for frames from camera
-        self.display_frame_buffer = queue.Queue(maxsize=5)  # Buffer for frames ready to display
+        self.display_frame_buffer = queue.Queue(
+            maxsize=5
+        )  # Buffer for frames ready to display
 
     def detection_worker(self):
         """Worker thread that processes frames for object detection separately."""
@@ -78,8 +81,6 @@ class VideoProcessor:
                 except queue.Empty:
                     continue
 
-                detection_start = time.time()
-
                 # Detect objects
                 all_detections = self.detector.detect_objects(frame)
 
@@ -88,11 +89,11 @@ class VideoProcessor:
                 filtered_detections = []
 
                 for detection in all_detections:
-                    object_class = detection['class_name']
+                    object_class = detection["class_name"]
                     # Check if this class is within backoff period
                     if object_class in self.last_detection_by_class:
                         last_time = self.last_detection_by_class[object_class]
-                        backoff_seconds = CONFIG.get('detection_backoff', 0)
+                        backoff_seconds = CONFIG.get("detection_backoff", 0)
 
                         # Skip this detection if it's too soon after last detection of same class
                         if current_time - last_time < backoff_seconds:
@@ -106,17 +107,20 @@ class VideoProcessor:
                 # Store the latest detections with a timestamp (all detections, not just filtered)
                 with processing_lock:
                     latest_detections = {
-                        'detections': all_detections,  # Store all for display purposes
-                        'timestamp': current_time,
-                        'frame': frame
+                        "detections": all_detections,  # Store all for display purposes
+                        "timestamp": current_time,
+                        "frame": frame,
                     }
 
                 # If objects detected (after filtering), save image only
                 if filtered_detections:
                     # Save detection image
-                    image_with_boxes = self.detector.draw_detections(frame.copy(),
-                                                                     filtered_detections)
-                    self.save_detection_image(filtered_detections, image_with_boxes, current_time)
+                    image_with_boxes = self.detector.draw_detections(
+                        frame.copy(), filtered_detections
+                    )
+                    self.save_detection_image(
+                        filtered_detections, image_with_boxes, current_time
+                    )
 
                 # Update performance metrics
                 detection_count += 1
@@ -134,6 +138,7 @@ class VideoProcessor:
             except Exception as e:
                 logger.error(f"Error in detection thread: {e}")
                 import traceback
+
                 traceback.print_exc()
 
     def open_camera(self):
@@ -142,9 +147,9 @@ class VideoProcessor:
             self.camera.release()
 
         # Determine if using test video or live camera
-        if CONFIG['use_test_video']:
+        if CONFIG["use_test_video"]:
             # Try to open the test video file
-            video_path = CONFIG['test_video_path']
+            video_path = CONFIG["test_video_path"]
             if not os.path.exists(video_path):
                 raise ValueError(f"Test video file not found: {video_path}")
 
@@ -152,7 +157,7 @@ class VideoProcessor:
             logger.info(f"Using test video: {video_path}")
         else:
             logger.info(f"Using camera source: {CONFIG['camera_source']}")
-            self.camera = cv2.VideoCapture(CONFIG['camera_source'])
+            self.camera = cv2.VideoCapture(CONFIG["camera_source"])
 
         if not self.camera.isOpened():
             raise ValueError("Could not open video source")
@@ -165,11 +170,16 @@ class VideoProcessor:
             self.fps = 30  # Default to 30 FPS if unable to determine
 
         # Store the total frame count for test videos
-        self.total_frames = int(self.camera.get(cv2.CAP_PROP_FRAME_COUNT)) if CONFIG[
-            'use_test_video'] else 0
+        self.total_frames = (
+            int(self.camera.get(cv2.CAP_PROP_FRAME_COUNT))
+            if CONFIG["use_test_video"]
+            else 0
+        )
 
-        source_type = "Test video" if CONFIG['use_test_video'] else "Camera"
-        logger.info(f"{source_type} opened: {self.frame_width} x {self.frame_height} @ {self.fps} FPS")
+        source_type = "Test video" if CONFIG["use_test_video"] else "Camera"
+        logger.info(
+            f"{source_type} opened: {self.frame_width} x {self.frame_height} @ {self.fps} FPS"
+        )
 
     def save_detection_image(self, detections, frame, detection_time=None):
         """
@@ -187,12 +197,14 @@ class VideoProcessor:
         if detection_time is None:
             detection_time = time.time()
 
-        timestamp = datetime.datetime.fromtimestamp(detection_time).strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.datetime.fromtimestamp(detection_time).strftime(
+            "%Y%m%d_%H%M%S"
+        )
         filename = f"{timestamp}"
 
         # Create paths
-        image_path = os.path.join(CONFIG['save_dir'], 'images', f"{filename}.jpg")
-        meta_path = os.path.join(CONFIG['save_dir'], 'images', f"{filename}.json")
+        image_path = os.path.join(CONFIG["save_dir"], "images", f"{filename}.jpg")
+        meta_path = os.path.join(CONFIG["save_dir"], "images", f"{filename}.json")
 
         # Ensure directory exists
         os.makedirs(os.path.dirname(image_path), exist_ok=True)
@@ -202,24 +214,24 @@ class VideoProcessor:
 
         # Create metadata
         metadata = {
-            'timestamp': timestamp,
-            'detections': detections,
-            'image_path': f"images/{filename}.jpg",
-            'id': timestamp
+            "timestamp": timestamp,
+            "detections": detections,
+            "image_path": f"images/{filename}.jpg",
+            "id": timestamp,
         }
 
         # No video path since we're only saving images
-        metadata['video_path'] = None
+        metadata["video_path"] = None
 
         # Write metadata using the custom JSON encoder
-        with open(meta_path, 'w') as f:
+        with open(meta_path, "w") as f:
             json.dump(metadata, f, cls=NumpyJSONEncoder)
 
         # Add to detection history
         with processing_lock:
             detection_history.insert(0, metadata)
             # Limit history size
-            while len(detection_history) > CONFIG['history_limit']:
+            while len(detection_history) > CONFIG["history_limit"]:
                 detection_history.pop()
 
         return metadata
@@ -249,15 +261,18 @@ class VideoProcessor:
                 display_frame = frame.copy()
 
                 # Draw latest detections on the frame if enabled and available
-                if CONFIG.get('display_detection_boxes', True) and latest_detections is not None:
+                if (
+                    CONFIG.get("display_detection_boxes", True)
+                    and latest_detections is not None
+                ):
                     # Only use detections that aren't too old (within 2 detection intervals)
                     current_time = time.time()
-                    max_age = CONFIG['detection_interval'] * 2
-                    if current_time - latest_detections['timestamp'] <= max_age:
+                    max_age = CONFIG["detection_interval"] * 2
+                    if current_time - latest_detections["timestamp"] <= max_age:
                         # Draw bounding boxes on the display frame
-                        if latest_detections['detections']:
+                        if latest_detections["detections"]:
                             display_frame = self.detector.draw_detections(
-                                display_frame, latest_detections['detections']
+                                display_frame, latest_detections["detections"]
                             )
 
                 # Put processed frame in display buffer for web streaming
@@ -292,6 +307,7 @@ class VideoProcessor:
             except Exception as e:
                 logger.error(f"Error in display thread: {e}")
                 import traceback
+
                 traceback.print_exc()
 
     def process_frame(self, frame):
@@ -308,7 +324,7 @@ class VideoProcessor:
         """
         # Sample frames for detection at specified intervals
         current_time = time.time()
-        if current_time - self.last_detection_time >= CONFIG['detection_interval']:
+        if current_time - self.last_detection_time >= CONFIG["detection_interval"]:
             self.last_detection_time = current_time
 
             # Queue frame for asynchronous detection (non-blocking)
@@ -341,18 +357,14 @@ class VideoProcessor:
 
             # Start detection thread
             self.detection_thread = threading.Thread(
-                target=self.detection_worker,
-                name="DetectionThread",
-                daemon=True
+                target=self.detection_worker, name="DetectionThread", daemon=True
             )
             self.detection_thread.start()
             logger.info("Started object detection thread")
 
             # Start display processing thread
             self.display_thread = threading.Thread(
-                target=self.display_worker,
-                name="DisplayThread",
-                daemon=True
+                target=self.display_worker, name="DisplayThread", daemon=True
             )
             self.display_thread.start()
             logger.info("Started display processing thread")
@@ -377,12 +389,12 @@ class VideoProcessor:
 
                 # Handle end of video for test videos
                 if not ret:
-                    if CONFIG['use_test_video']:
+                    if CONFIG["use_test_video"]:
                         # Restart camera if loop is enabled
-                        if CONFIG['test_video_loop']:
+                        if CONFIG["test_video_loop"]:
                             self.camera.set(cv2.CAP_PROP_POS_FRAMES, 0)
                         else:
-                            # Re-open camera (this will restart the video) 
+                            # Re-open camera (this will restart the video)
                             self.open_camera()
                         continue
                     else:
@@ -413,13 +425,14 @@ class VideoProcessor:
                     frame_queue.put(frame.copy())
 
                 # For test videos, respect the original fps to maintain proper playback speed
-                if CONFIG['use_test_video']:
+                if CONFIG["use_test_video"]:
                     target_delay = 1 / max(self.fps, 1)  # Time per frame in seconds
                     time.sleep(target_delay)
 
         except Exception as e:
             logger.error(f"Error in capture thread: {e}")
             import traceback
+
             traceback.print_exc()
         finally:
             # Stop all worker threads
@@ -431,8 +444,11 @@ class VideoProcessor:
                 self.stop_detection = True
                 # Wait for the thread to finish (with timeout)
                 self.detection_thread.join(timeout=2.0)
-                logger.debug("Detection thread stopped" if not self.detection_thread.is_alive()
-                      else "Detection thread timeout - continuing shutdown")
+                logger.debug(
+                    "Detection thread stopped"
+                    if not self.detection_thread.is_alive()
+                    else "Detection thread timeout - continuing shutdown"
+                )
 
             # Stop the display thread if it's running
             if self.display_thread and self.display_thread.is_alive():
@@ -440,8 +456,11 @@ class VideoProcessor:
                 self.stop_display = True
                 # Wait for the thread to finish (with timeout)
                 self.display_thread.join(timeout=2.0)
-                logger.error("Display thread stopped" if not self.display_thread.is_alive()
-                      else "Display thread timeout - continuing shutdown")
+                logger.error(
+                    "Display thread stopped"
+                    if not self.display_thread.is_alive()
+                    else "Display thread timeout - continuing shutdown"
+                )
 
             # Video recording cleanup has been removed
 
@@ -469,11 +488,13 @@ def generate_frames():
                 frame = frame_queue.get()
 
                 # Encode the frame as JPEG
-                ret, buffer = cv2.imencode('.jpg', frame)
+                ret, buffer = cv2.imencode(".jpg", frame)
                 if ret:
                     # Yield the frame in the format expected by Flask's Response
-                    yield (b'--frame\r\n'
-                           b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
+                    yield (
+                        b"--frame\r\n"
+                        b"Content-Type: image/jpeg\r\n\r\n" + buffer.tobytes() + b"\r\n"
+                    )
 
                 # Mark as done
                 frame_queue.task_done()
@@ -492,9 +513,7 @@ def start_video_processor():
 
     # Start the capture thread with a name for easier identification
     capture_thread = threading.Thread(
-        target=video_processor.capture_and_process,
-        name="CaptureThread",
-        daemon=True
+        target=video_processor.capture_and_process, name="CaptureThread", daemon=True
     )
     capture_thread.start()
     logger.info(f"Started capture thread: {capture_thread.name}")
